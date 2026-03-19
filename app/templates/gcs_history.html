@@ -1,0 +1,509 @@
+{% extends "base.html" %}
+
+{% block title %}수정 이력{% endblock %}
+{% block nav_history %}active{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+    <h2 style="margin:0;">수정 이력</h2>
+</div>
+
+<!-- TASK 필터 -->
+<div class="task-filter">
+    <a href="/api/v1/gcs/history"
+       class="task-filter-btn {% if not selected_task %}active{% endif %}">
+        전체
+    </a>
+    {% for t in tasks %}
+    <a href="/api/v1/gcs/history?task={{ t.id }}"
+       class="task-filter-btn {% if selected_task == t.id %}active{% endif %}">
+        {{ t.name }}
+    </a>
+    {% endfor %}
+</div>
+
+{% if gcs_error %}
+<div class="hist-alert">GCS 오류: {{ gcs_error }}</div>
+{% endif %}
+
+{% if active_sessions %}
+<div class="hist-section">
+    <div class="hist-summary">
+        {% if selected_task_name %}<strong>{{ selected_task_name }}</strong> — {% endif %}
+        편집 중인 파일 <strong>{{ active_sessions | length }}</strong>개
+    </div>
+    <table class="hist-table">
+        <thead>
+            <tr>
+                <th>파일명</th>
+                <th>행 수</th>
+                <th>로드 시각</th>
+                <th>액션</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for f in active_sessions %}
+            <tr>
+                <td>
+                    <code>{{ f.name }}</code>
+                    <div style="font-size:11px; color:#999; margin-top:2px;">{{ f.gcs_path }}</div>
+                </td>
+                <td>{{ f.total_rows }}</td>
+                <td>{{ f.loaded_at[:19] if f.loaded_at else '-' }}</td>
+                <td>
+                    <button class="btn btn-sm btn-diff"
+                            onclick="openVersionPanel('{{ f.gcs_path }}', '{{ f.name }}')">
+                        버전 비교
+                    </button>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="hist-placeholder">
+    {% if selected_task %}
+    해당 TASK에 편집 중인 파일이 없습니다.
+    {% else %}
+    현재 편집 중인 파일이 없습니다. GCS 파일을 편집하면 여기에 표시됩니다.
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- 버전 선택 + Diff 뷰 패널 -->
+<div class="diff-overlay" id="diffOverlay">
+    <div class="diff-panel">
+        <div class="diff-panel-header">
+            <h3 id="diffFileName"></h3>
+            <button class="btn-close-diff" onclick="closeDiffPanel()">&times;</button>
+        </div>
+
+        <!-- 버전 목록 -->
+        <div class="version-selector" id="versionSelector">
+            <p style="color:#666; font-size:13px; margin-bottom:12px;">비교할 버전 2개를 선택하세요:</p>
+            <div id="versionList" class="version-list"></div>
+            <div style="margin-top:12px; text-align:right;">
+                <button class="btn btn-sm btn-diff" id="compareBtnDisabled" disabled
+                        onclick="runDiff()">
+                    비교하기 (2개 선택 필요)
+                </button>
+            </div>
+        </div>
+
+        <!-- Diff 결과 (split 뷰) -->
+        <div class="diff-result" id="diffResult" style="display:none;">
+            <div class="diff-summary" id="diffSummary"></div>
+            <div class="diff-items" id="diffItems"></div>
+            <div style="margin-top:12px;">
+                <button class="btn btn-sm" style="background:#EEE; color:#333;"
+                        onclick="backToVersions()">← 버전 선택으로</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .task-filter { display: flex; gap: 8px; margin-bottom: 20px; }
+    .task-filter-btn {
+        padding: 8px 20px; border-radius: 20px;
+        text-decoration: none; font-size: 14px; font-weight: 600;
+        background: #F5F5F5; color: #666; border: 2px solid transparent;
+        transition: all 0.2s;
+    }
+    .task-filter-btn:hover { background: #E3F2FD; color: #1565C0; }
+    .task-filter-btn.active { background: #1976D2; color: white; border-color: #1565C0; }
+    .hist-alert {
+        background: #FFEBEE; color: #C62828; padding: 14px 18px;
+        border-radius: 8px; margin-bottom: 16px; border: 1px solid #EF9A9A;
+    }
+    .hist-placeholder {
+        background: #FFF3E0; padding: 40px; border-radius: 8px;
+        text-align: center; color: #E65100; font-size: 15px;
+    }
+    .hist-section {
+        background: white; padding: 20px; border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .hist-summary { margin-bottom: 12px; font-size: 14px; color: #666; }
+    .hist-table { width: 100%; border-collapse: collapse; }
+    .hist-table th {
+        background: #F5F5F5; padding: 10px 12px; text-align: left;
+        font-size: 13px; border-bottom: 2px solid #E0E0E0;
+    }
+    .hist-table td { padding: 10px 12px; border-bottom: 1px solid #F0F0F0; font-size: 13px; }
+    .hist-table tr:hover { background: #FAFAFA; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 4px; cursor: pointer; border: none; }
+    .btn-diff { background: #7B1FA2; color: white; }
+    .btn-diff:hover { background: #6A1B9A; }
+    .btn-diff:disabled { background: #CCC; cursor: not-allowed; }
+
+    /* Diff 오버레이 */
+    .diff-overlay {
+        display: none; position: fixed; inset: 0;
+        background: rgba(0,0,0,0.5); z-index: 2000;
+        justify-content: center; align-items: flex-start;
+        padding-top: 40px; overflow-y: auto;
+    }
+    .diff-overlay.show { display: flex; }
+    .diff-panel {
+        background: white; border-radius: 12px; width: 95%; max-width: 1200px;
+        max-height: 90vh; overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3); padding: 24px;
+    }
+    .diff-panel-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px;
+    }
+    .diff-panel-header h3 { margin: 0; font-size: 16px; color: #333; }
+    .btn-close-diff {
+        background: none; border: none; font-size: 24px; cursor: pointer;
+        color: #999; line-height: 1;
+    }
+    .btn-close-diff:hover { color: #333; }
+
+    /* 버전 목록 */
+    .version-list { display: flex; flex-direction: column; gap: 6px; }
+    .version-item {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 14px; border-radius: 6px; border: 1px solid #E0E0E0;
+        cursor: pointer; transition: all 0.15s; font-size: 13px;
+    }
+    .version-item:hover { background: #F5F9FF; border-color: #90CAF9; }
+    .version-item.selected { background: #E3F2FD; border-color: #1976D2; }
+    .version-item input[type="checkbox"] { margin: 0; }
+    .version-label-live {
+        background: #E8F5E9; color: #2E7D32;
+        padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    }
+    .version-label-old {
+        background: #F5F5F5; color: #888;
+        padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    }
+
+    /* Diff 결과 */
+    .diff-summary {
+        display: flex; gap: 16px; padding: 12px 16px; border-radius: 8px;
+        background: #F5F5F5; margin-bottom: 16px; font-size: 13px;
+    }
+    .diff-stat { font-weight: 700; }
+    .diff-stat.added { color: #2E7D32; }
+    .diff-stat.removed { color: #C62828; }
+    .diff-stat.modified { color: #E65100; }
+    .diff-stat.unchanged { color: #888; }
+    .diff-items { display: flex; flex-direction: column; gap: 12px; }
+
+    /* Split diff row */
+    .diff-row {
+        border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;
+    }
+    .diff-row-header {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 14px; background: #F5F5F5;
+        border-bottom: 1px solid #E0E0E0; cursor: pointer;
+    }
+    .diff-row-header:hover { background: #EEEEEE; }
+    .diff-row-id { font-weight: 700; font-size: 13px; }
+    .diff-row-badge {
+        font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 4px;
+    }
+    .diff-row-badge.added { background: #C8E6C9; color: #1B5E20; }
+    .diff-row-badge.removed { background: #FFCDD2; color: #B71C1C; }
+    .diff-row-badge.modified { background: #FFE0B2; color: #E65100; }
+    .diff-row-fields {
+        font-size: 12px; color: #888; margin-left: auto;
+    }
+
+    /* Split columns */
+    .diff-split {
+        display: none; /* toggled by JS */
+    }
+    .diff-split.open { display: block; }
+    .diff-split-cols {
+        display: grid; grid-template-columns: 1fr 1fr; min-height: 0;
+    }
+    .diff-col {
+        padding: 12px; font-size: 12px; font-family: monospace;
+        white-space: pre-wrap; word-break: break-all;
+        overflow-y: auto; max-height: 400px;
+        border-right: 1px solid #E0E0E0;
+    }
+    .diff-col:last-child { border-right: none; }
+    .diff-col-header {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 1px; margin-bottom: 8px; padding-bottom: 6px;
+        border-bottom: 1px solid #E0E0E0;
+    }
+    .diff-col.old { background: #FFF8F8; }
+    .diff-col.old .diff-col-header { color: #C62828; }
+    .diff-col.new { background: #F8FFF8; }
+    .diff-col.new .diff-col-header { color: #2E7D32; }
+    .diff-col.only-added { background: #E8F5E9; }
+    .diff-col.only-removed { background: #FFEBEE; }
+
+    /* 필드별 하이라이트 */
+    .diff-field-row { margin-bottom: 4px; line-height: 1.5; }
+    .diff-field-key { color: #555; }
+    .diff-field-val { color: #333; }
+    .diff-field-val.changed-old {
+        background: #FFCDD2; padding: 1px 4px; border-radius: 3px;
+        text-decoration: line-through; color: #B71C1C;
+    }
+    .diff-field-val.changed-new {
+        background: #C8E6C9; padding: 1px 4px; border-radius: 3px;
+        color: #1B5E20; font-weight: 600;
+    }
+    .diff-field-val.unchanged { color: #AAA; }
+
+    /* Deep diff table */
+    .deep-diff-container { padding: 12px; }
+    .deep-diff-table {
+        width: 100%; border-collapse: collapse; font-size: 12px; font-family: monospace;
+    }
+    .deep-diff-table th {
+        background: #F5F5F5; padding: 8px 12px; text-align: left;
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.5px; border-bottom: 2px solid #E0E0E0;
+    }
+    .deep-diff-table td {
+        padding: 8px 12px; border-bottom: 1px solid #F0F0F0;
+        white-space: pre-wrap; word-break: break-all; vertical-align: top;
+    }
+    .deep-diff-path {
+        font-weight: 600; color: #1565C0; background: #E3F2FD;
+        border-radius: 4px; white-space: nowrap;
+    }
+    .deep-diff-old {
+        background: #FFF8F8; color: #B71C1C;
+        text-decoration: line-through;
+    }
+    .deep-diff-new {
+        background: #F8FFF8; color: #1B5E20; font-weight: 600;
+    }
+    .deep-diff-table tr:hover { background: #FAFAFA; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentGcsPath = '';
+let selectedGenerations = [];
+
+function openVersionPanel(gcsPath, fileName) {
+    currentGcsPath = gcsPath;
+    selectedGenerations = [];
+    document.getElementById('diffFileName').textContent = fileName;
+    document.getElementById('versionSelector').style.display = '';
+    document.getElementById('diffResult').style.display = 'none';
+    document.getElementById('diffOverlay').classList.add('show');
+    loadVersions(gcsPath);
+}
+
+function closeDiffPanel() {
+    document.getElementById('diffOverlay').classList.remove('show');
+    currentGcsPath = '';
+    selectedGenerations = [];
+}
+
+async function loadVersions(gcsPath) {
+    const listEl = document.getElementById('versionList');
+    listEl.innerHTML = '<div style="color:#999; padding:12px;">버전 조회 중...</div>';
+
+    try {
+        const resp = await fetch(`/api/v1/gcs/versions/${encodeURIComponent(gcsPath)}`, {
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) throw new Error('버전 조회 실패');
+        const data = await resp.json();
+
+        if (!data.versions || data.versions.length === 0) {
+            listEl.innerHTML = '<div style="color:#E65100; padding:12px;">버전 정보가 없습니다.</div>';
+            return;
+        }
+
+        let html = '';
+        data.versions.forEach((v) => {
+            const label = v.is_live
+                ? '<span class="version-label-live">현재</span>'
+                : '<span class="version-label-old">이전</span>';
+            html += `
+                <label class="version-item" data-gen="${v.generation}">
+                    <input type="checkbox" value="${v.generation}" onchange="onVersionCheck(this)">
+                    ${label}
+                    <span>${v.updated}</span>
+                    <span style="color:#888;">${v.size_display}</span>
+                    <span style="color:#BBB; font-family:monospace; font-size:11px;">#${v.generation}</span>
+                </label>
+            `;
+        });
+        listEl.innerHTML = html;
+    } catch (e) {
+        listEl.innerHTML = `<div style="color:#C62828; padding:12px;">오류: ${e.message}</div>`;
+    }
+}
+
+function onVersionCheck(cb) {
+    if (cb.checked) {
+        if (selectedGenerations.length >= 2) {
+            cb.checked = false;
+            showToast('최대 2개까지 선택 가능합니다.', 'warning');
+            return;
+        }
+        selectedGenerations.push(parseInt(cb.value));
+    } else {
+        selectedGenerations = selectedGenerations.filter(g => g !== parseInt(cb.value));
+    }
+
+    document.querySelectorAll('.version-item').forEach(el => {
+        const gen = parseInt(el.dataset.gen);
+        el.classList.toggle('selected', selectedGenerations.includes(gen));
+    });
+
+    const btn = document.getElementById('compareBtnDisabled');
+    if (selectedGenerations.length === 2) {
+        btn.disabled = false;
+        btn.textContent = '비교하기';
+    } else {
+        btn.disabled = true;
+        btn.textContent = `비교하기 (${selectedGenerations.length}/2 선택)`;
+    }
+}
+
+async function runDiff() {
+    if (selectedGenerations.length !== 2) return;
+
+    const [a, b] = selectedGenerations.sort((x, y) => x - y);
+    const resultEl = document.getElementById('diffResult');
+    const selectorEl = document.getElementById('versionSelector');
+
+    selectorEl.style.display = 'none';
+    resultEl.style.display = '';
+    document.getElementById('diffSummary').innerHTML = '<span style="color:#999;">비교 중...</span>';
+    document.getElementById('diffItems').innerHTML = '';
+
+    try {
+        const url = `/api/v1/gcs/diff?gcs_path=${encodeURIComponent(currentGcsPath)}&gen_a=${a}&gen_b=${b}`;
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) throw new Error('Diff 실패');
+        const data = await resp.json();
+
+        const s = data.summary;
+        document.getElementById('diffSummary').innerHTML = `
+            <span>전체: <strong>${s.total}</strong></span>
+            <span class="diff-stat added">추가: ${s.added}</span>
+            <span class="diff-stat removed">삭제: ${s.removed}</span>
+            <span class="diff-stat modified">수정: ${s.modified}</span>
+            <span class="diff-stat unchanged">변경없음: ${s.unchanged}</span>
+        `;
+
+        const itemsEl = document.getElementById('diffItems');
+        if (data.diff_items.length === 0) {
+            itemsEl.innerHTML = '<div style="color:#888; text-align:center; padding:20px;">변경사항이 없습니다.</div>';
+            return;
+        }
+
+        let html = '';
+        data.diff_items.forEach((item, idx) => {
+            const statusLabel = item.status === 'added' ? '추가' : item.status === 'removed' ? '삭제' : '수정';
+            const deepChanges = item.deep_changes || [];
+            const fieldsInfo = deepChanges.length > 0
+                ? `변경: ${deepChanges.map(c => c.path).join(', ')}`
+                : (item.changed_fields && item.changed_fields.length > 0
+                    ? `변경: ${item.changed_fields.join(', ')}`
+                    : '');
+
+            html += `
+                <div class="diff-row">
+                    <div class="diff-row-header" onclick="toggleDiffRow(${idx})">
+                        <span class="diff-row-id">${esc(item.data_id)}</span>
+                        <span class="diff-row-badge ${item.status}">${statusLabel}</span>
+                        <span class="diff-row-fields">${esc(fieldsInfo)}</span>
+                    </div>
+                    <div class="diff-split" id="diffSplit${idx}">
+                        ${item.status === 'modified' && deepChanges.length > 0
+                            ? renderDeepDiff(deepChanges)
+                            : `<div class="diff-split-cols">
+                                <div class="diff-col old">
+                                    <div class="diff-col-header">이전 버전</div>
+                                    <div class="diff-col-body">${renderSplitCol(item, 'old')}</div>
+                                </div>
+                                <div class="diff-col new">
+                                    <div class="diff-col-header">현재 버전</div>
+                                    <div class="diff-col-body">${renderSplitCol(item, 'new')}</div>
+                                </div>
+                            </div>`}
+                    </div>
+                </div>
+            `;
+        });
+        itemsEl.innerHTML = html;
+
+    } catch (e) {
+        document.getElementById('diffSummary').innerHTML = `<span style="color:#C62828;">오류: ${e.message}</span>`;
+    }
+}
+
+function toggleDiffRow(idx) {
+    const el = document.getElementById(`diffSplit${idx}`);
+    el.classList.toggle('open');
+}
+
+function renderDeepDiff(deepChanges) {
+    let html = '<div class="deep-diff-container">';
+    html += '<table class="deep-diff-table">';
+    html += '<thead><tr><th>변경 경로</th><th>이전 값</th><th>변경 후</th></tr></thead>';
+    html += '<tbody>';
+    deepChanges.forEach(c => {
+        const oldStr = c.old === null || c.old === undefined ? '(없음)'
+            : typeof c.old === 'string' ? c.old : JSON.stringify(c.old, null, 2);
+        const newStr = c.new === null || c.new === undefined ? '(없음)'
+            : typeof c.new === 'string' ? c.new : JSON.stringify(c.new, null, 2);
+        html += `<tr>
+            <td class="deep-diff-path">${esc(c.path)}</td>
+            <td class="deep-diff-old">${esc(truncate(oldStr, 500))}</td>
+            <td class="deep-diff-new">${esc(truncate(newStr, 500))}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function renderSplitCol(item, side) {
+    const obj = item[side];
+    if (!obj) {
+        return `<div style="color:#BBB; text-align:center; padding:20px;">${side === 'old' ? '(없음 — 신규 추가)' : '(삭제됨)'}</div>`;
+    }
+
+    const changedFields = new Set(item.changed_fields || []);
+    let html = '';
+
+    for (const [key, val] of Object.entries(obj)) {
+        if (key.startsWith('_')) continue;
+        const isChanged = changedFields.has(key);
+        if (!isChanged) continue;
+
+        const valStr = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
+        let valClass = side === 'old' ? 'changed-old' : 'changed-new';
+
+        html += `<div class="diff-field-row">`;
+        html += `<span class="diff-field-key">${esc(key)}:</span> `;
+        html += `<span class="diff-field-val ${valClass}">${esc(truncate(valStr, 500))}</span>`;
+        html += `</div>`;
+    }
+    return html || '<div style="color:#BBB; padding:8px;">변경 없음</div>';
+}
+
+function backToVersions() {
+    document.getElementById('versionSelector').style.display = '';
+    document.getElementById('diffResult').style.display = 'none';
+}
+
+function truncate(str, max) {
+    return str.length > max ? str.substring(0, max) + '...' : str;
+}
+
+function esc(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+{% endblock %}

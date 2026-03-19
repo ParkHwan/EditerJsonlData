@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+
+{% block title %}사용자 관리 - JSONL Editor{% endblock %}
+
+{% block extra_css %}
+<style>
+.admin-container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+.admin-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px;
+}
+.admin-header h2 { margin: 0; color: #1565C0; font-size: 22px; }
+.add-btn {
+    padding: 10px 20px; background: #1976D2; color: white;
+    border: none; border-radius: 8px; font-weight: 600;
+    cursor: pointer; font-size: 14px;
+}
+.add-btn:hover { background: #1565C0; }
+.users-table {
+    width: 100%; border-collapse: collapse;
+    background: white; border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06); overflow: hidden;
+}
+.users-table th {
+    background: #F5F5F5; padding: 12px 14px; text-align: left;
+    font-size: 13px; color: #555; font-weight: 600; border-bottom: 1px solid #e0e0e0;
+}
+.users-table td {
+    padding: 11px 14px; font-size: 14px; border-bottom: 1px solid #f0f0f0;
+}
+.users-table tr:last-child td { border-bottom: none; }
+.badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.badge-admin { background: #E8EAF6; color: #3F51B5; }
+.badge-active { background: #E8F5E9; color: #2E7D32; }
+.badge-inactive { background: #FBE9E7; color: #BF360C; }
+.action-btn {
+    padding: 5px 10px; border: 1px solid #ddd; border-radius: 5px;
+    font-size: 12px; cursor: pointer; background: white; margin-right: 4px;
+}
+.action-btn:hover { background: #f5f5f5; }
+.action-btn.danger { color: #C62828; border-color: #FFCDD2; }
+.action-btn.danger:hover { background: #FFEBEE; }
+
+/* 등록 모달 */
+.modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+    background: white; padding: 32px; border-radius: 16px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.2); width: 420px; max-width: 90vw;
+}
+.modal h3 { margin: 0 0 20px; color: #1565C0; }
+.modal .form-group { margin-bottom: 14px; }
+.modal .form-group label {
+    display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px; color: #555;
+}
+.modal .form-group input,
+.modal .form-group select {
+    width: 100%; padding: 9px 12px; border: 1.5px solid #ddd;
+    border-radius: 6px; font-size: 14px; box-sizing: border-box;
+}
+.modal .form-group input:focus,
+.modal .form-group select:focus {
+    outline: none; border-color: #1976D2;
+}
+.modal-actions {
+    display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;
+}
+.modal-actions button {
+    padding: 9px 20px; border-radius: 6px; font-size: 14px;
+    font-weight: 600; cursor: pointer; border: none;
+}
+.btn-cancel { background: #e0e0e0; color: #333; }
+.btn-submit { background: #1976D2; color: white; }
+.btn-submit:hover { background: #1565C0; }
+.modal-error {
+    color: #C62828; font-size: 13px; margin-top: 8px; display: none;
+}
+.empty-state {
+    text-align: center; padding: 48px 16px; color: #999; font-size: 15px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <div class="admin-header">
+        <h2>사용자 관리</h2>
+        <button class="add-btn" onclick="openRegisterModal()">+ 사용자 등록</button>
+    </div>
+
+    {% if users %}
+    <table class="users-table">
+        <thead>
+            <tr>
+                <th>이름</th>
+                <th>이메일</th>
+                <th>권한</th>
+                <th>상태</th>
+                <th>로그인 횟수</th>
+                <th>최근 로그인</th>
+                <th>관리</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td><strong>{{ u.display_name }}</strong></td>
+                <td>{{ u.email }}</td>
+                <td>
+                    {% if u.is_admin %}<span class="badge badge-admin">관리자</span>
+                    {% else %}<span class="badge">일반</span>{% endif %}
+                </td>
+                <td>
+                    {% if u.is_active %}<span class="badge badge-active">활성</span>
+                    {% else %}<span class="badge badge-inactive">비활성</span>{% endif %}
+                </td>
+                <td>{{ u.login_count }}회</td>
+                <td>{{ u.last_login_at[:19] if u.last_login_at else '-' }}</td>
+                <td>
+                    <button class="action-btn" onclick="toggleUser('{{ u.user_id }}')">
+                        {{ '비활성화' if u.is_active else '활성화' }}
+                    </button>
+                    <button class="action-btn" onclick="openResetPwModal('{{ u.user_id }}', '{{ u.display_name }}')">
+                        비밀번호
+                    </button>
+                    <button class="action-btn danger" onclick="deleteUser('{{ u.user_id }}', '{{ u.display_name }}')">
+                        삭제
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">등록된 사용자가 없습니다. 위 버튼으로 사용자를 등록해 주세요.</div>
+    {% endif %}
+</div>
+
+<!-- 사용자 등록 모달 -->
+<div class="modal-overlay" id="registerModal">
+    <div class="modal">
+        <h3>사용자 등록</h3>
+        <form onsubmit="registerUser(event)">
+            <div class="form-group">
+                <label>이름</label>
+                <input type="text" id="regName" placeholder="홍길동" required>
+            </div>
+            <div class="form-group">
+                <label>이메일</label>
+                <input type="email" id="regEmail" placeholder="hong@crowdworks.kr" required>
+            </div>
+            <div class="form-group">
+                <label>비밀번호</label>
+                <input type="text" id="regPassword" placeholder="초기 비밀번호" required>
+            </div>
+            <div class="form-group">
+                <label>권한</label>
+                <select id="regAdmin">
+                    <option value="false">일반 사용자</option>
+                    <option value="true">관리자</option>
+                </select>
+            </div>
+            <div class="modal-error" id="regError"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" onclick="closeModal('registerModal')">취소</button>
+                <button type="submit" class="btn-submit">등록</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 비밀번호 재설정 모달 -->
+<div class="modal-overlay" id="resetPwModal">
+    <div class="modal">
+        <h3>비밀번호 재설정 — <span id="resetTarget"></span></h3>
+        <form onsubmit="resetPassword(event)">
+            <input type="hidden" id="resetUserId">
+            <div class="form-group">
+                <label>새 비밀번호</label>
+                <input type="text" id="resetNewPw" placeholder="새 비밀번호 입력" required>
+            </div>
+            <div class="modal-error" id="resetError"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" onclick="closeModal('resetPwModal')">취소</button>
+                <button type="submit" class="btn-submit">변경</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function openRegisterModal() {
+    document.getElementById('registerModal').classList.add('active');
+}
+function openResetPwModal(userId, name) {
+    document.getElementById('resetUserId').value = userId;
+    document.getElementById('resetTarget').textContent = name;
+    document.getElementById('resetNewPw').value = '';
+    document.getElementById('resetPwModal').classList.add('active');
+}
+function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+}
+
+async function registerUser(e) {
+    e.preventDefault();
+    const errEl = document.getElementById('regError');
+    errEl.style.display = 'none';
+
+    const email = document.getElementById('regEmail').value.trim().toLowerCase();
+    if (!email.endsWith('@crowdworks.kr')) {
+        errEl.textContent = '@crowdworks.kr 이메일만 등록할 수 있습니다.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        const resp = await csrfFetch('/api/v1/auth/users/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email,
+                display_name: document.getElementById('regName').value.trim(),
+                password: document.getElementById('regPassword').value,
+                is_admin: document.getElementById('regAdmin').value === 'true'
+            })
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            errEl.textContent = err.detail || '등록 실패';
+            errEl.style.display = 'block';
+            return;
+        }
+        window.location.reload();
+    } catch (err) {
+        errEl.textContent = '서버 연결 실패';
+        errEl.style.display = 'block';
+    }
+}
+
+async function toggleUser(userId) {
+    if (!confirm('사용자 상태를 변경하시겠습니까?')) return;
+    try {
+        const resp = await csrfFetch('/api/v1/auth/users/' + userId + '/toggle', { method: 'PATCH' });
+        if (resp.ok) window.location.reload();
+        else alert('변경 실패');
+    } catch (e) { alert('서버 연결 실패'); }
+}
+
+async function resetPassword(e) {
+    e.preventDefault();
+    const userId = document.getElementById('resetUserId').value;
+    const newPw = document.getElementById('resetNewPw').value;
+    const errEl = document.getElementById('resetError');
+    errEl.style.display = 'none';
+
+    try {
+        const resp = await csrfFetch('/api/v1/auth/users/' + userId + '/password', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_password: newPw })
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            errEl.textContent = err.detail || '변경 실패';
+            errEl.style.display = 'block';
+            return;
+        }
+        alert('비밀번호가 변경되었습니다.');
+        closeModal('resetPwModal');
+    } catch (err) {
+        errEl.textContent = '서버 연결 실패';
+        errEl.style.display = 'block';
+    }
+}
+
+async function deleteUser(userId, name) {
+    if (!confirm(name + ' (' + userId + ') 사용자를 삭제하시겠습니까?')) return;
+    try {
+        const resp = await csrfFetch('/api/v1/auth/users/' + userId, { method: 'DELETE' });
+        if (resp.ok) window.location.reload();
+        else alert('삭제 실패');
+    } catch (e) { alert('서버 연결 실패'); }
+}
+</script>
+{% endblock %}

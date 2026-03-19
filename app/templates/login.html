@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}로그인 - JSONL Editor{% endblock %}
+
+{% block extra_css %}
+<style>
+.login-container {
+    max-width: 420px;
+    margin: 80px auto;
+    padding: 0 16px;
+}
+.login-card {
+    background: white;
+    padding: 40px 32px;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+}
+.login-logo {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: #1565C0;
+    margin-bottom: 4px;
+}
+.login-subtitle {
+    text-align: center;
+    color: #777;
+    font-size: 14px;
+    margin-bottom: 28px;
+}
+.form-group {
+    margin-bottom: 18px;
+}
+.form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 14px;
+    color: #444;
+}
+.form-group input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+.form-group input:focus {
+    outline: none;
+    border-color: #1976D2;
+    box-shadow: 0 0 0 3px rgba(25,118,210,0.12);
+}
+.login-btn {
+    width: 100%;
+    padding: 13px;
+    background: #1976D2;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 4px;
+}
+.login-btn:hover { background: #1565C0; }
+.login-btn:disabled {
+    background: #90CAF9;
+    cursor: not-allowed;
+}
+.domain-notice {
+    margin-top: 20px;
+    padding: 10px 14px;
+    background: #E3F2FD;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #1565C0;
+    text-align: center;
+    line-height: 1.5;
+}
+.login-error {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #FFEBEE;
+    border-radius: 8px;
+    color: #C62828;
+    font-size: 13px;
+    text-align: center;
+    display: none;
+}
+.login-footer {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 12px;
+    color: #aaa;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-logo">JSONL Editor</div>
+        <div class="login-subtitle">EBS AI 학습 데이터 편집 도구</div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="email">이메일</label>
+                <input type="email" id="email" name="email"
+                       placeholder="example@crowdworks.kr" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label for="password">비밀번호</label>
+                <input type="password" id="password" name="password"
+                       placeholder="비밀번호를 입력하세요" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="login-btn" id="loginBtn">로그인</button>
+            <div class="login-error" id="loginError"></div>
+        </form>
+
+        <div class="domain-notice">
+            <strong>@crowdworks.kr</strong> 회사 이메일 계정만 로그인할 수 있습니다.<br>
+            계정이 없으시면 관리자에게 문의해 주세요.
+        </div>
+
+        <div class="login-footer">
+            Crowdworks Data Engineering Team
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function handleLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById('email').value.trim().toLowerCase();
+    const password = document.getElementById('password').value;
+    const errorEl = document.getElementById('loginError');
+    const btn = document.getElementById('loginBtn');
+    errorEl.style.display = 'none';
+
+    if (!email || !password) {
+        errorEl.textContent = '이메일과 비밀번호를 입력해 주세요.';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    if (!email.endsWith('@crowdworks.kr')) {
+        errorEl.textContent = '@crowdworks.kr 이메일만 사용할 수 있습니다.';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '로그인 중...';
+
+    try {
+        const resp = await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ email, password })
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json();
+            errorEl.textContent = err.detail || '로그인 실패';
+            errorEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = '로그인';
+            return;
+        }
+
+        window.location.href = '/api/v1/view/files';
+
+    } catch (err) {
+        errorEl.textContent = '서버 연결 실패';
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '로그인';
+    }
+}
+</script>
+{% endblock %}

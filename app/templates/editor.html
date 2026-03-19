@@ -1,0 +1,1500 @@
+{% extends "base.html" %}
+
+{% block title %}{{ file_name }} - JSONL Editor{% endblock %}
+{% block nav_files %}active{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Master-Detail 레이아웃 ── */
+.editor-wrapper {
+    display: flex;
+    gap: 0;
+    height: calc(100vh - 56px);
+    overflow: hidden;
+}
+
+/* ── 좌측 사이드바 (data_id 목록) ── */
+.sidebar {
+    width: 320px;
+    min-width: 280px;
+    background: white;
+    border-right: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+.sidebar-header {
+    padding: 14px 16px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+}
+.sidebar-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1565C0;
+    margin-bottom: 4px;
+}
+.sidebar-meta {
+    font-size: 12px;
+    color: #757575;
+}
+.sidebar-search {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+}
+.sidebar-search input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.sidebar-search input:focus {
+    border-color: #1976D2;
+    box-shadow: 0 0 0 2px rgba(25,118,210,0.15);
+}
+.sidebar-list {
+    flex: 1;
+    overflow-y: auto;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.sidebar-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.sidebar-item:hover {
+    background: #E3F2FD;
+}
+.sidebar-item.active {
+    background: #1976D2;
+    color: white;
+}
+.sidebar-item.active .sid-idx {
+    background: rgba(255,255,255,0.25);
+    color: white;
+}
+.sidebar-item.active .sid-id {
+    color: white;
+}
+.sid-idx {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 22px;
+    background: #E3F2FD;
+    color: #1565C0;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.sid-id {
+    font-size: 13px;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── 우측 상세 패널 ── */
+.detail-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: #f5f5f5;
+}
+.detail-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #9E9E9E;
+    font-size: 16px;
+}
+.detail-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.detail-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.detail-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── 인라인 편집 모드 ── */
+.item.inline-editing {
+    border: 3px solid #4CAF50 !important;
+    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.25);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+.item.inline-editing .header {
+    background: #4CAF50 !important;
+}
+.editable-value[contenteditable="true"] {
+    background: #FFFDE7 !important;
+    border: 1px dashed #FF9800 !important;
+    padding: 3px 6px;
+    border-radius: 3px;
+    outline: none;
+    min-height: 1.4em;
+    display: inline-block;
+    cursor: text;
+    transition: border-color 0.2s;
+}
+.editable-value[contenteditable="true"]:focus {
+    border-color: #4CAF50 !important;
+    box-shadow: 0 0 0 2px rgba(76,175,80,0.2);
+}
+td.editable-value[contenteditable="true"] {
+    display: table-cell;
+}
+/* 인라인 편집용 textarea (복잡한 값용) */
+.inline-edit-ta {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px dashed #FF9800;
+    border-radius: 4px;
+    background: #FFFDE7;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+.inline-edit-ta:focus {
+    outline: none;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 2px rgba(76,175,80,0.2);
+}
+/* JSON 유효성 인디케이터 */
+.inline-edit-ta.json-valid {
+    border-color: #4CAF50 !important;
+    border-style: solid !important;
+}
+.inline-edit-ta.json-invalid {
+    border-color: #F44336 !important;
+    border-style: solid !important;
+    background: #FFF0F0 !important;
+}
+.json-validation-msg {
+    font-size: 11px;
+    margin-top: 3px;
+    font-weight: 600;
+}
+.json-validation-msg.valid { color: #4CAF50; }
+.json-validation-msg.invalid { color: #F44336; }
+.json-validation-msg.warning { color: #FF9800; }
+/* 저장 확인 오버레이 */
+.save-confirm-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+.save-confirm-box {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 720px;
+    width: 95%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.save-confirm-box h3 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    color: #1565C0;
+}
+.save-confirm-box .change-item {
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+.save-confirm-box .change-item.modified {
+    background: #E8F5E9;
+    border-left: 3px solid #4CAF50;
+}
+.save-confirm-box .change-item.warning {
+    background: #FFF3E0;
+    border-left: 3px solid #FF9800;
+}
+.save-confirm-box .change-item.error {
+    background: #FFEBEE;
+    border-left: 3px solid #F44336;
+}
+.save-confirm-box .change-field {
+    font-weight: 700;
+    color: #333;
+}
+.save-confirm-box .change-detail {
+    color: #666;
+    font-size: 12px;
+    margin-top: 4px;
+}
+.save-confirm-box .change-diff-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 6px;
+}
+.save-confirm-box .change-diff-col {
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 150px;
+    overflow-y: auto;
+    line-height: 1.5;
+}
+.save-confirm-box .change-diff-col.old-val {
+    background: #FFEBEE;
+    border: 1px solid #EF9A9A;
+}
+.save-confirm-box .change-diff-col.new-val {
+    background: #E8F5E9;
+    border: 1px solid #A5D6A7;
+}
+.save-confirm-box .change-diff-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+    display: block;
+}
+.save-confirm-box .change-diff-label.old { color: #C62828; }
+.save-confirm-box .change-diff-label.new { color: #2E7D32; }
+.save-confirm-box .hl-removed {
+    background: #FFCDD2;
+    text-decoration: line-through;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+.save-confirm-box .hl-added {
+    background: #C8E6C9;
+    font-weight: 600;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+.save-confirm-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+/* 인라인 버튼 */
+.btn-inline-save {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 4px 14px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.btn-inline-save:hover { background: #388E3C; }
+.btn-inline-cancel {
+    background: #9E9E9E;
+    color: white;
+    border: none;
+    padding: 4px 14px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.btn-inline-cancel:hover { background: #757575; }
+/* 인라인 상태 표시 */
+.inline-edit-status {
+    font-size: 12px;
+    color: #FFD54F;
+    font-weight: 600;
+    margin: 0 8px;
+}
+.autosave-indicator {
+    font-size: 11px;
+    margin-right: 8px;
+}
+.autosave-indicator.saving { color: #FF9800; }
+.autosave-indicator.saved { color: #81C784; }
+/* Draft 배너 (인라인) */
+.draft-banner-inline {
+    background: #FFF3E0;
+    border-bottom: 2px solid #FF9800;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    color: #E65100;
+}
+.draft-banner-inline button {
+    margin-left: 6px;
+}
+/* content_meta 동적 편집 섹션 */
+.inline-meta-section {
+    margin-top: 12px;
+    border: 1px dashed #FF9800;
+    border-radius: 6px;
+    padding: 12px;
+    background: #FFF8E1;
+}
+.inline-meta-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #E65100;
+}
+/* 로딩 인디케이터 */
+.loading-spinner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    color: #9E9E9E;
+    font-size: 14px;
+}
+
+/* Lock 상태 배지 (Phase 4) */
+.lock-badge {
+    font-size: 11px;
+    color: #F44336;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+.lock-badge.mine {
+    color: #4CAF50;
+}
+/* GCS 모드 UI */
+.gcs-mode-badge {
+    display: inline-block;
+    background: #E3F2FD;
+    color: #1565C0;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+.btn-gcs-publish {
+    background: #FF6D00;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.btn-gcs-publish:hover { background: #E65100; }
+.btn-gcs-publish:disabled { background: #CCC; cursor: not-allowed; }
+.btn-gcs-discard {
+    background: #9E9E9E;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.btn-gcs-discard:hover { background: #757575; }
+</style>
+{% endblock %}
+
+{% block content_full %}
+<div class="editor-wrapper">
+    <!-- 좌측: data_id 목록 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">{{ file_name }}</div>
+            <div class="sidebar-meta">총 {{ total_items }}개 항목</div>
+        </div>
+        <div class="sidebar-search">
+            <input type="text" id="sidebarSearch" placeholder="data_id 검색..." oninput="filterSidebar(this.value)">
+        </div>
+        <ul class="sidebar-list" id="sidebarList">
+            {% for item in data_id_list %}
+            <li class="sidebar-item" data-row-idx="{{ item.row_idx }}" data-data-id="{{ item.data_id }}">
+                <span class="sid-idx">{{ item.row_idx + 1 }}</span>
+                <span class="sid-id" title="{{ item.data_id }}">{{ item.data_id }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- 우측: 상세 뷰 -->
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-placeholder" id="detailPlaceholder">
+            좌측 목록에서 항목을 선택해주세요
+        </div>
+        <div id="detailContent" style="display:none;">
+            <div class="detail-toolbar">
+                <div class="detail-toolbar-left">
+                    <strong id="detailTitle"></strong>
+                    {% if edit_mode == 'gcs' %}
+                    <span class="gcs-mode-badge">☁️ GCS 편집</span>
+                    {% endif %}
+                </div>
+                <div class="detail-toolbar-right">
+                    {% if edit_mode == 'gcs' %}
+                    <button class="btn btn-gcs-publish" onclick="publishToGCS()">GCS 파일 업데이트</button>
+                    <button class="btn btn-gcs-discard" onclick="discardWorkingCopy()">🗑️ 편집 취소</button>
+                    {% else %}
+                    <a href="/api/v1/view/files/{{ file_id }}/download" class="btn btn-download">JSONL 다운로드</a>
+                    {% endif %}
+                </div>
+            </div>
+            <div id="cardContainer">
+                <!-- AJAX로 렌더링된 카드 삽입 -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const FILE_ID = "{{ file_id }}";
+const API_V1_STR = "/api/v1";
+const CURRENT_USER_ID = "{{ current_user.user_id | default('') | e }}";
+const AUTO_SAVE_INTERVAL = parseInt("{{ auto_save_interval | default(30) }}", 10);
+const GCS_DATE = "{{ gcs_date | default('') | e }}";
+const EDIT_MODE = "{{ edit_mode | default('local') | e }}";
+
+let currentRowIdx = null;
+let currentVersion = null;
+let currentDataId = null;
+let selectedRowIdx = null;
+let heartbeatInterval = null;
+let autoSaveInterval = null;
+let pendingDraftData = null;
+let rawEditData = null;
+let originalHtmlMap = {};
+let originalTypeMap = {};
+
+// ── Lock 상태 실시간 표시 (Phase 4) ──
+const lockStateByRow = {};
+function updateSidebarLockBadge(rowIdx, userId, displayName) {
+    const el = document.querySelector(`.sidebar-item[data-row-idx="${rowIdx}"]`);
+    if (!el) return;
+    let badge = el.querySelector('.lock-badge');
+    if (userId) {
+        lockStateByRow[rowIdx] = { user_id: userId, display_name: displayName || userId };
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'lock-badge';
+            el.appendChild(badge);
+        }
+        const isMine = userId === CURRENT_USER_ID;
+        if (isMine) badge.classList.add('mine'); else badge.classList.remove('mine');
+        badge.textContent = isMine ? '\uD83D\uDD12 (나)' : '\uD83D\uDD12 ' + (displayName || userId);
+    } else {
+        delete lockStateByRow[rowIdx];
+        if (badge) badge.remove();
+    }
+}
+function applyLockStateToSidebar() {
+    Object.keys(lockStateByRow).forEach(idx => {
+        const r = lockStateByRow[Number(idx)];
+        if (r) updateSidebarLockBadge(Number(idx), r.user_id, r.display_name);
+    });
+}
+class LockStatusManager {
+    constructor(fileId, currentUserId) {
+        this.fileId = fileId;
+        this.currentUserId = currentUserId;
+        this.ws = null;
+        this.reconnectDelay = 1000;
+        this.maxReconnectDelay = 30000;
+        this.pingInterval = null;
+    }
+    get wsUrl() {
+        const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${scheme}//${window.location.host}${API_V1_STR}/ws/lock-status/${encodeURIComponent(this.fileId)}`;
+    }
+    connect() {
+        if (!this.fileId) return;
+        this.ws = new WebSocket(this.wsUrl);
+        this.ws.onmessage = (ev) => {
+            try {
+                const data = JSON.parse(ev.data);
+                if (data.type === 'init' && Array.isArray(data.locks)) {
+                    data.locks.forEach(l => {
+                        lockStateByRow[l.row_idx] = { user_id: l.user_id, display_name: l.user_id };
+                        updateSidebarLockBadge(l.row_idx, l.user_id, l.user_id);
+                    });
+                } else if (data.type === 'lock_change') {
+                    if (data.action === 'acquired') {
+                        updateSidebarLockBadge(data.row_idx, data.user_id, data.display_name || data.user_id);
+                    } else if (data.action === 'released') {
+                        updateSidebarLockBadge(data.row_idx, null);
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        };
+        this.ws.onclose = () => {
+            this._stopPing();
+            this.ws = null;
+            const delay = this.reconnectDelay;
+            this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
+            setTimeout(() => this.connect(), delay);
+        };
+        this.ws.onopen = () => {
+            this.reconnectDelay = 1000;
+            this._startPing();
+        };
+    }
+    _startPing() {
+        this._stopPing();
+        this.pingInterval = setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                try { this.ws.send(JSON.stringify({ type: 'ping' })); } catch (e) { /* ignore */ }
+            }
+        }, 30000);
+    }
+    _stopPing() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+    }
+    disconnect() {
+        if (this.pingInterval) clearInterval(this.pingInterval);
+        this.pingInterval = null;
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+    }
+}
+let lockStatusManager = null;
+
+// ── 사이드바 검색 필터 ──
+function filterSidebar(query) {
+    const items = document.querySelectorAll('.sidebar-item');
+    const q = query.toLowerCase();
+    items.forEach(item => {
+        const dataId = item.dataset.dataId.toLowerCase();
+        item.style.display = dataId.includes(q) ? '' : 'none';
+    });
+}
+
+// ── 사이드바 항목 선택 ──
+async function selectItem(el, rowIdx, dataId) {
+    // 편집 중이면 경고
+    if (currentRowIdx !== null) {
+        if (!confirm('편집 중인 내용이 있습니다. 다른 항목을 선택하시겠습니까?\n저장하지 않은 변경사항은 사라집니다.')) {
+            return;
+        }
+        await cancelEdit();
+    }
+
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+    selectedRowIdx = rowIdx;
+    currentDataId = dataId;
+
+    document.getElementById('detailPlaceholder').style.display = 'none';
+    document.getElementById('detailContent').style.display = 'block';
+    document.getElementById('detailTitle').textContent = `${dataId} (Row ${rowIdx + 1})`;
+
+    const container = document.getElementById('cardContainer');
+    container.innerHTML = '<div class="loading-spinner">로딩 중...</div>';
+
+    try {
+        let cardUrl = `/api/v1/editor/card/${FILE_ID}/${rowIdx}`;
+        if (GCS_DATE) cardUrl += `?gcs_date=${encodeURIComponent(GCS_DATE)}`;
+
+        const resp = await fetch(cardUrl, {
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) throw new Error('카드 로드 실패');
+        container.innerHTML = await resp.text();
+
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            window.MathJax.typesetPromise([container]);
+        }
+    } catch (e) {
+        container.innerHTML = `<div class="error-msg">카드 로드 실패: ${e.message}</div>`;
+    }
+}
+
+// ══════════════════════════════════════════════
+//  인라인 편집 — Lock 획득 → 편집 모드 진입
+// ══════════════════════════════════════════════
+async function acquireLock(dataId, rowIdx) {
+    try {
+        const resp = await csrfFetch(`/api/v1/editor/lock/${FILE_ID}/${rowIdx}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (resp.status === 401) {
+            window.location.href = '/api/v1/view/login';
+            return;
+        }
+        if (!resp.ok) {
+            const err = await resp.json();
+            showToast(err.detail || '편집 잠금 실패', 'error');
+            return;
+        }
+
+        currentRowIdx = rowIdx;
+        currentDataId = dataId;
+        showToast('편집 모드 진입', 'success');
+
+        // Raw 데이터 로드
+        const dataResp = await fetch(`/api/v1/editor/data/${FILE_ID}/${rowIdx}`);
+        if (!dataResp.ok) throw new Error('데이터 로드 실패');
+        rawEditData = await dataResp.json();
+        currentVersion = rawEditData.version || 1;
+
+        // 카드를 인라인 편집 모드로 전환
+        const card = document.querySelector(`.item[data-row-idx="${rowIdx}"]`);
+        if (!card) throw new Error('카드를 찾을 수 없습니다');
+
+        enterInlineEdit(card);
+
+        // Draft 확인
+        await checkDraft(rowIdx, card);
+
+        // Heartbeat (30초 간격)
+        heartbeatInterval = setInterval(() => sendHeartbeat(rowIdx), 30000);
+
+        // Auto-save 시작
+        startAutoSave();
+
+    } catch (e) {
+        showToast('편집 모드 진입 실패: ' + e.message, 'error');
+    }
+}
+
+// ── 인라인 편집 모드 진입 ──
+function enterInlineEdit(card) {
+    card.classList.add('inline-editing');
+    originalHtmlMap = {};
+    originalTypeMap = {};
+
+    // 카드 내 모든 editable-value에 대해 편집 가능 설정
+    const editables = card.querySelectorAll('.editable-value[data-field]');
+    editables.forEach(el => {
+        const field = el.dataset.field;
+        originalHtmlMap[field] = el.innerHTML;
+
+        const rawValue = getNestedValue(rawEditData, field);
+        originalTypeMap[field] = classifyValueType(rawValue);
+
+        if (rawValue === null || rawValue === undefined) {
+            el.textContent = '';
+            el.contentEditable = 'true';
+        } else if (typeof rawValue === 'string') {
+            el.textContent = rawValue;
+            el.contentEditable = 'true';
+        } else {
+            const jsonStr = JSON.stringify(rawValue, null, 2);
+            const rows = Math.min(Math.max(jsonStr.split('\n').length, 3), 15);
+            el.innerHTML = '';
+            const ta = document.createElement('textarea');
+            ta.className = 'inline-edit-ta';
+            ta.rows = rows;
+            ta.value = jsonStr;
+            ta.dataset.originalType = classifyValueType(rawValue);
+            el.appendChild(ta);
+            attachJsonValidator(ta);
+            el.dataset.useTextarea = 'true';
+        }
+        el.dataset.editing = 'true';
+    });
+
+    // content_meta 편집 섹션 동적 추가
+    if (rawEditData.content_meta && typeof rawEditData.content_meta === 'object') {
+        const metaSection = document.createElement('div');
+        metaSection.className = 'inline-meta-section';
+        metaSection.id = 'inlineContentMeta';
+
+        let metaHtml = '<h4>content_meta (메타데이터)</h4>';
+        metaHtml += '<table class="info-table">';
+        for (const [k, v] of Object.entries(rawEditData.content_meta)) {
+            const displayVal = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+            const isComplex = typeof v !== 'string';
+            const metaField = `content_meta.${k}`;
+            originalTypeMap[metaField] = classifyValueType(v);
+            if (isComplex) {
+                const rows = Math.min(Math.max(displayVal.split('\n').length, 2), 10);
+                metaHtml += `<tr>
+                    <th style="background-color:#E65100;color:white;width:150px;">${escapeHtml(k)}</th>
+                    <td class="editable-value" data-field="${escapeHtml(metaField)}" data-editing="true" data-use-textarea="true">
+                        <textarea class="inline-edit-ta" data-original-type="${classifyValueType(v)}" rows="${rows}">${escapeHtml(displayVal)}</textarea>
+                    </td>
+                </tr>`;
+            } else {
+                metaHtml += `<tr>
+                    <th style="background-color:#E65100;color:white;width:150px;">${escapeHtml(k)}</th>
+                    <td class="editable-value" data-field="${escapeHtml(metaField)}" data-editing="true" contenteditable="true">${escapeHtml(displayVal)}</td>
+                </tr>`;
+            }
+        }
+        metaHtml += '</table>';
+        metaSection.innerHTML = metaHtml;
+        card.appendChild(metaSection);
+
+        metaSection.querySelectorAll('.inline-edit-ta').forEach(ta => attachJsonValidator(ta));
+    }
+
+    // 편집 버튼 → 저장/취소 버튼으로 교체
+    const actions = card.querySelector('.header-actions');
+    actions.dataset.originalHtml = actions.innerHTML;
+    actions.innerHTML = `
+        <span class="autosave-indicator" id="autosaveIndicator"></span>
+        <button class="btn-inline-cancel" onclick="cancelEdit()">취소</button>
+        <button class="btn-inline-save" onclick="saveEdit()">저장</button>
+    `;
+
+    // 편집 상태 표시
+    const status = card.querySelector('.inline-edit-status');
+    if (status) status.textContent = '편집 중';
+}
+
+// ══════════════════════════════════════════════
+//  값 헬퍼 함수
+// ══════════════════════════════════════════════
+function getNestedValue(obj, path) {
+    const parts = path.split('.');
+    let current = obj;
+    for (const part of parts) {
+        if (current === null || current === undefined) return undefined;
+        current = current[part];
+    }
+    return current;
+}
+
+function setNestedValue(obj, path, value) {
+    const parts = path.split('.');
+    let current = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+        if (!current[parts[i]] || typeof current[parts[i]] !== 'object') {
+            current[parts[i]] = {};
+        }
+        current = current[parts[i]];
+    }
+    current[parts[parts.length - 1]] = value;
+}
+
+function deepMerge(target, source) {
+    for (const key of Object.keys(source)) {
+        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key]) &&
+            target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])) {
+            deepMerge(target[key], source[key]);
+        } else {
+            target[key] = source[key];
+        }
+    }
+}
+
+function escapeHtml(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ══════════════════════════════════════════════
+//  데이터 구조 보호 — 타입 분류 / JSON 검증
+// ══════════════════════════════════════════════
+function classifyValueType(val) {
+    if (val === null || val === undefined) return 'null';
+    if (Array.isArray(val)) return 'array';
+    if (typeof val === 'object') return 'dict';
+    if (typeof val === 'number') return 'number';
+    return 'string';
+}
+
+function attachJsonValidator(ta) {
+    let msgEl = ta.nextElementSibling;
+    if (!msgEl || !msgEl.classList.contains('json-validation-msg')) {
+        msgEl = document.createElement('div');
+        msgEl.className = 'json-validation-msg';
+        ta.parentNode.insertBefore(msgEl, ta.nextSibling);
+    }
+    const validate = () => {
+        const text = ta.value.trim();
+        if (!text) {
+            ta.classList.remove('json-valid', 'json-invalid');
+            msgEl.className = 'json-validation-msg warning';
+            msgEl.textContent = '⚠ 값이 비어 있습니다';
+            return;
+        }
+        try {
+            const parsed = JSON.parse(text);
+            const origType = ta.dataset.originalType || '';
+            const newType = classifyValueType(parsed);
+            if (origType && origType !== newType && origType !== 'null') {
+                ta.classList.remove('json-valid');
+                ta.classList.add('json-invalid');
+                msgEl.className = 'json-validation-msg invalid';
+                msgEl.textContent = `⛔ 타입 변경 감지: ${origType} → ${newType} (원본 구조를 유지하세요)`;
+            } else {
+                ta.classList.remove('json-invalid');
+                ta.classList.add('json-valid');
+                msgEl.className = 'json-validation-msg valid';
+                msgEl.textContent = '✓ JSON 유효';
+            }
+        } catch (e) {
+            ta.classList.remove('json-valid');
+            ta.classList.add('json-invalid');
+            msgEl.className = 'json-validation-msg invalid';
+            msgEl.textContent = `⛔ JSON 오류: ${e.message}`;
+        }
+    };
+    ta.addEventListener('input', validate);
+    validate();
+}
+
+function validateAllChanges() {
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return { valid: true, errors: [], warnings: [], changes: [] };
+
+    const errors = [];
+    const warnings = [];
+    const changes = [];
+    const editables = card.querySelectorAll('[data-field][data-editing="true"]');
+
+    editables.forEach(el => {
+        const field = el.dataset.field;
+        const origType = originalTypeMap[field] || 'string';
+        const rawOriginal = getNestedValue(rawEditData, field);
+        let newValue;
+
+        if (el.dataset.useTextarea === 'true') {
+            const ta = el.querySelector('.inline-edit-ta');
+            const text = ta ? ta.value.trim() : '';
+
+            if (!text && rawOriginal !== null && rawOriginal !== undefined && rawOriginal !== '') {
+                warnings.push({ field, msg: '값이 비어 있습니다 (원래 값 존재)' });
+            }
+
+            if (text && (origType === 'dict' || origType === 'array')) {
+                try {
+                    const parsed = JSON.parse(text);
+                    const newType = classifyValueType(parsed);
+                    if (origType !== newType) {
+                        errors.push({ field, msg: `타입 변경: ${origType} → ${newType}` });
+                    }
+                    newValue = parsed;
+                } catch (e) {
+                    errors.push({ field, msg: `JSON 파싱 오류: ${e.message}` });
+                    return;
+                }
+            } else {
+                try { newValue = JSON.parse(text); } catch { newValue = text; }
+            }
+        } else {
+            newValue = el.textContent.trim();
+            if (!newValue && rawOriginal !== null && rawOriginal !== undefined && rawOriginal !== '') {
+                warnings.push({ field, msg: '값이 비어 있습니다 (원래 값 존재)' });
+            }
+        }
+
+        const origStr = (rawOriginal === null || rawOriginal === undefined) ? '' :
+            (typeof rawOriginal === 'string' ? rawOriginal : JSON.stringify(rawOriginal));
+        const newStr = (newValue === null || newValue === undefined) ? '' :
+            (typeof newValue === 'string' ? newValue : JSON.stringify(newValue));
+
+        if (origStr !== newStr) {
+            changes.push({ field, from: origStr, to: newStr });
+        }
+    });
+
+    return { valid: errors.length === 0, errors, warnings, changes };
+}
+
+function highlightDiff(oldStr, newStr, side) {
+    const oldWords = (oldStr || '').split(/(\s+)/);
+    const newWords = (newStr || '').split(/(\s+)/);
+
+    if (side === 'old') {
+        return oldWords.map(w => {
+            if (!w.trim()) return escapeHtml(w);
+            if (!newStr.includes(w.trim())) {
+                return `<span class="hl-removed">${escapeHtml(w)}</span>`;
+            }
+            return escapeHtml(w);
+        }).join('');
+    } else {
+        return newWords.map(w => {
+            if (!w.trim()) return escapeHtml(w);
+            if (!oldStr.includes(w.trim())) {
+                return `<span class="hl-added">${escapeHtml(w)}</span>`;
+            }
+            return escapeHtml(w);
+        }).join('');
+    }
+}
+
+function showSaveConfirm(validation) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'save-confirm-overlay';
+        overlay.id = 'saveConfirmOverlay';
+
+        let itemsHtml = '';
+
+        if (validation.errors.length > 0) {
+            itemsHtml += '<div style="margin-bottom:12px;font-weight:700;color:#F44336;">⛔ 오류 (저장 불가)</div>';
+            validation.errors.forEach(e => {
+                itemsHtml += `<div class="change-item error">
+                    <div class="change-field">${escapeHtml(e.field)}</div>
+                    <div class="change-detail">${escapeHtml(e.msg)}</div>
+                </div>`;
+            });
+        }
+
+        if (validation.warnings.length > 0) {
+            itemsHtml += '<div style="margin-bottom:8px;margin-top:12px;font-weight:700;color:#FF9800;">⚠ 주의</div>';
+            validation.warnings.forEach(w => {
+                itemsHtml += `<div class="change-item warning">
+                    <div class="change-field">${escapeHtml(w.field)}</div>
+                    <div class="change-detail">${escapeHtml(w.msg)}</div>
+                </div>`;
+            });
+        }
+
+        if (validation.changes.length > 0) {
+            itemsHtml += '<div style="margin-bottom:8px;margin-top:12px;font-weight:700;color:#4CAF50;">변경된 필드 (' + validation.changes.length + '개)</div>';
+            validation.changes.forEach(c => {
+                itemsHtml += `<div class="change-item modified">
+                    <div class="change-field">${escapeHtml(c.field)}</div>
+                    <div class="change-diff-split">
+                        <div class="change-diff-col old-val">
+                            <span class="change-diff-label old">이전</span>${highlightDiff(c.from, c.to, 'old')}
+                        </div>
+                        <div class="change-diff-col new-val">
+                            <span class="change-diff-label new">변경후</span>${highlightDiff(c.from, c.to, 'new')}
+                        </div>
+                    </div>
+                </div>`;
+            });
+        } else if (validation.errors.length === 0 && validation.warnings.length === 0) {
+            itemsHtml = '<div style="color:#9E9E9E;text-align:center;padding:20px;">변경된 내용이 없습니다</div>';
+        }
+
+        const hasErrors = validation.errors.length > 0;
+        const noChanges = validation.changes.length === 0 && validation.errors.length === 0 && validation.warnings.length === 0;
+
+        overlay.innerHTML = `
+            <div class="save-confirm-box">
+                <h3>저장 전 확인</h3>
+                ${itemsHtml}
+                <div class="save-confirm-actions">
+                    <button class="btn-inline-cancel" id="saveConfirmCancel">취소</button>
+                    ${hasErrors || noChanges ? '' : '<button class="btn-inline-save" id="saveConfirmOk">저장</button>'}
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        document.getElementById('saveConfirmCancel').onclick = () => {
+            overlay.remove();
+            resolve(false);
+        };
+
+        const okBtn = document.getElementById('saveConfirmOk');
+        if (okBtn) {
+            okBtn.onclick = () => {
+                overlay.remove();
+                resolve(true);
+            };
+        }
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+                resolve(false);
+            }
+        });
+    });
+}
+
+// ══════════════════════════════════════════════
+//  인라인 편집 값 수집
+// ══════════════════════════════════════════════
+function collectInlineChanges() {
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return {};
+
+    const changes = {};
+    const modifiedTopKeys = new Set();
+    const editables = card.querySelectorAll('[data-field][data-editing="true"]');
+
+    editables.forEach(el => {
+        const field = el.dataset.field;
+        const origType = originalTypeMap[field] || 'string';
+        let value;
+
+        if (el.dataset.useTextarea === 'true') {
+            const ta = el.querySelector('.inline-edit-ta');
+            const text = ta ? ta.value.trim() : '';
+
+            if (origType === 'dict' || origType === 'array') {
+                try {
+                    value = JSON.parse(text);
+                } catch (e) {
+                    value = getNestedValue(rawEditData, field);
+                    return;
+                }
+                const newType = classifyValueType(value);
+                if (origType !== newType) {
+                    value = getNestedValue(rawEditData, field);
+                    return;
+                }
+            } else {
+                try { value = JSON.parse(text); } catch { value = text; }
+            }
+        } else {
+            value = el.textContent.trim();
+            if (origType === 'number') {
+                const num = Number(value);
+                if (!isNaN(num)) value = num;
+            }
+        }
+
+        const topKey = field.split('.')[0];
+        modifiedTopKeys.add(topKey);
+        setNestedValue(changes, field, value);
+    });
+
+    for (const topKey of modifiedTopKeys) {
+        if (rawEditData[topKey] && typeof rawEditData[topKey] === 'object' && !Array.isArray(rawEditData[topKey])) {
+            const merged = JSON.parse(JSON.stringify(rawEditData[topKey]));
+            if (changes[topKey] && typeof changes[topKey] === 'object') {
+                deepMerge(merged, changes[topKey]);
+            }
+            changes[topKey] = merged;
+        }
+    }
+
+    return changes;
+}
+
+// ══════════════════════════════════════════════
+//  저장
+// ══════════════════════════════════════════════
+async function saveEdit() {
+    if (currentRowIdx === null) return;
+
+    const validation = validateAllChanges();
+
+    const confirmed = await showSaveConfirm(validation);
+    if (!confirmed) return;
+
+    const changes = collectInlineChanges();
+
+    try {
+        const resp = await csrfFetch(`/api/v1/editor/data/${FILE_ID}/${currentRowIdx}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                changes: changes,
+                version: currentVersion
+            })
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json();
+            showToast(err.detail || '저장 실패', 'error');
+            return;
+        }
+
+        const result = await resp.json();
+        if (EDIT_MODE === 'gcs') {
+            showToast('저장 완료! (Redis에 임시 저장됨 — "GCS 파일 업데이트"로 최종 반영)', 'success');
+        } else {
+            showToast('저장 완료!', 'success');
+        }
+        const savedRowIdx = currentRowIdx;
+        const savedDataId = currentDataId;
+        await exitInlineEdit(true);
+
+        const activeItem = document.querySelector('.sidebar-item.active');
+        if (activeItem) {
+            selectItem(activeItem, savedRowIdx, savedDataId);
+        }
+
+    } catch (e) {
+        showToast('저장 중 오류: ' + e.message, 'error');
+    }
+}
+
+// ══════════════════════════════════════════════
+//  취소
+// ══════════════════════════════════════════════
+async function cancelEdit() {
+    if (currentRowIdx === null) return;
+
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (card) {
+        // 원본 HTML 복원
+        const editables = card.querySelectorAll('.editable-value[data-editing="true"]');
+        editables.forEach(el => {
+            const field = el.dataset.field;
+            if (originalHtmlMap[field] !== undefined) {
+                el.innerHTML = originalHtmlMap[field];
+            }
+            el.contentEditable = 'false';
+            el.removeAttribute('data-editing');
+            el.removeAttribute('data-use-textarea');
+        });
+
+        // 동적 추가된 content_meta 섹션 제거
+        const metaSection = document.getElementById('inlineContentMeta');
+        if (metaSection) metaSection.remove();
+
+        // Draft 배너 제거
+        const banner = document.getElementById('draftBanner');
+        if (banner) banner.remove();
+
+        // 버튼 복원
+        const actions = card.querySelector('.header-actions');
+        if (actions && actions.dataset.originalHtml) {
+            actions.innerHTML = actions.dataset.originalHtml;
+        }
+
+        card.classList.remove('inline-editing');
+        const status = card.querySelector('.inline-edit-status');
+        if (status) status.textContent = '';
+
+        // MathJax 재렌더링
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            window.MathJax.typesetPromise([card]);
+        }
+    }
+
+    await exitInlineEdit(true);
+}
+
+// ── 편집 종료 공통 ──
+async function exitInlineEdit(releaseLock) {
+    if (releaseLock && currentRowIdx !== null) {
+        try {
+            await csrfFetch(`/api/v1/editor/lock/${FILE_ID}/${currentRowIdx}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (e) { /* silent */ }
+    }
+
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        autoSaveInterval = null;
+    }
+
+    currentRowIdx = null;
+    currentVersion = null;
+    rawEditData = null;
+    originalHtmlMap = {};
+    originalTypeMap = {};
+    pendingDraftData = null;
+}
+
+// ══════════════════════════════════════════════
+//  Draft 관련
+// ══════════════════════════════════════════════
+async function checkDraft(rowIdx, card) {
+    try {
+        const resp = await fetch(`/api/v1/editor/draft/${FILE_ID}/${rowIdx}`, {
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        if (data.exists && data.draft) {
+            pendingDraftData = data.draft;
+
+            const savedAt = new Date(data.draft.saved_at).toLocaleString('ko-KR');
+            const banner = document.createElement('div');
+            banner.id = 'draftBanner';
+            banner.className = 'draft-banner-inline';
+            banner.innerHTML = `
+                <span>이전에 저장하지 않은 편집 내용이 있습니다. (${savedAt})</span>
+                <div>
+                    <button class="btn-inline-save" onclick="restoreDraft()" style="font-size:12px;padding:3px 10px;">복원</button>
+                    <button class="btn-inline-cancel" onclick="discardDraft()" style="font-size:12px;padding:3px 10px;">무시</button>
+                </div>
+            `;
+            // 카드 header 다음에 삽입
+            const header = card.querySelector('.header');
+            if (header && header.nextSibling) {
+                card.insertBefore(banner, header.nextSibling);
+            } else {
+                card.appendChild(banner);
+            }
+        }
+    } catch (e) { /* silent */ }
+}
+
+function restoreDraft() {
+    if (!pendingDraftData || currentRowIdx === null) return;
+
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return;
+
+    const changes = pendingDraftData.content;
+    if (changes && typeof changes === 'object') {
+        applyChangesToCard(card, changes, '');
+    }
+
+    const banner = document.getElementById('draftBanner');
+    if (banner) banner.remove();
+    pendingDraftData = null;
+    showToast('이전 편집 내용이 복원되었습니다', 'success');
+}
+
+function applyChangesToCard(card, obj, prefix) {
+    for (const [key, value] of Object.entries(obj)) {
+        const field = prefix ? `${prefix}.${key}` : key;
+
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            // 중첩 객체면 재귀
+            applyChangesToCard(card, value, field);
+        } else {
+            const el = card.querySelector(`[data-field="${field}"][data-editing="true"]`);
+            if (el) {
+                if (el.dataset.useTextarea === 'true') {
+                    const ta = el.querySelector('.inline-edit-ta');
+                    if (ta) ta.value = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+                } else {
+                    el.textContent = typeof value === 'string' ? value : JSON.stringify(value);
+                }
+            }
+        }
+    }
+}
+
+async function discardDraft() {
+    if (currentRowIdx === null) return;
+
+    try {
+        await csrfFetch(`/api/v1/editor/draft/${FILE_ID}/${currentRowIdx}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+    } catch (e) { /* silent */ }
+
+    const banner = document.getElementById('draftBanner');
+    if (banner) banner.remove();
+    pendingDraftData = null;
+    showToast('이전 편집 내용을 무시했습니다', 'info');
+}
+
+// ══════════════════════════════════════════════
+//  Auto-save / Heartbeat
+// ══════════════════════════════════════════════
+function startAutoSave() {
+    if (autoSaveInterval) clearInterval(autoSaveInterval);
+    autoSaveInterval = setInterval(autoSaveDraft, AUTO_SAVE_INTERVAL * 1000);
+}
+
+async function autoSaveDraft() {
+    if (currentRowIdx === null || currentVersion === null) return;
+
+    const indicator = document.getElementById('autosaveIndicator');
+    if (indicator) {
+        indicator.className = 'autosave-indicator saving';
+        indicator.textContent = '저장 중...';
+    }
+
+    try {
+        const changes = collectInlineChanges();
+        const resp = await csrfFetch(`/api/v1/editor/draft/${FILE_ID}/${currentRowIdx}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content: changes,
+                version: currentVersion
+            })
+        });
+
+        if (resp.ok && indicator) {
+            const now = new Date().toLocaleTimeString('ko-KR');
+            indicator.className = 'autosave-indicator saved';
+            indicator.textContent = `자동 저장됨 (${now})`;
+        } else if (indicator) {
+            indicator.className = 'autosave-indicator';
+            indicator.textContent = '자동 저장 실패';
+        }
+    } catch (e) {
+        if (indicator) {
+            indicator.className = 'autosave-indicator';
+            indicator.textContent = '자동 저장 실패';
+        }
+    }
+}
+
+async function sendHeartbeat(rowIdx) {
+    try {
+        const resp = await fetch(`/api/v1/editor/lock/${FILE_ID}/${rowIdx}/heartbeat`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) {
+            showToast('Lock 연장 실패 - 저장 후 닫아주세요', 'warning');
+        }
+    } catch (e) { /* silent */ }
+}
+
+// ══════════════════════════════════════════════
+//  GCS 업데이트 / 편집 취소 (GCS 모드 전용)
+// ══════════════════════════════════════════════
+async function publishToGCS() {
+    if (EDIT_MODE !== 'gcs') return;
+
+    if (currentRowIdx !== null) {
+        showToast('편집 중인 행을 먼저 저장하거나 취소해주세요.', 'warning');
+        return;
+    }
+
+    if (!confirm('편집한 내용을 GCS 파일에 업데이트하시겠습니까?\n기존 GCS 파일이 덮어쓰기됩니다.')) {
+        return;
+    }
+
+    const btn = document.querySelector('.btn-gcs-publish');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 업데이트 중...'; }
+
+    try {
+        const resp = await csrfFetch(`/api/v1/editor/publish/${FILE_ID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message || 'GCS 파일 업데이트 완료!', 'success');
+        } else {
+            showToast(data.detail || 'GCS 파일 업데이트 실패', 'error');
+        }
+    } catch (e) {
+        showToast('GCS 업데이트 오류: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'GCS 파일 업데이트'; }
+    }
+}
+
+async function discardWorkingCopy() {
+    if (EDIT_MODE !== 'gcs') return;
+
+    if (currentRowIdx !== null) {
+        showToast('편집 중인 행을 먼저 저장하거나 취소해주세요.', 'warning');
+        return;
+    }
+
+    if (!confirm('편집 세션을 취소하시겠습니까?\n모든 변경사항이 폐기되며 GCS 원본에는 영향이 없습니다.')) {
+        return;
+    }
+
+    try {
+        const resp = await csrfFetch(`/api/v1/editor/discard/${FILE_ID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message || '편집 세션 취소됨', 'success');
+            setTimeout(() => { window.location.href = '/api/v1/gcs/browse'; }, 1000);
+        } else {
+            showToast(data.detail || '취소 실패', 'error');
+        }
+    } catch (e) {
+        showToast('취소 오류: ' + e.message, 'error');
+    }
+}
+
+// ══════════════════════════════════════════════
+//  단축키 및 이벤트
+// ══════════════════════════════════════════════
+
+// ESC 키로 편집 취소
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && currentRowIdx !== null) {
+        cancelEdit();
+    }
+});
+
+// Ctrl+S로 저장
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (currentRowIdx !== null) {
+            saveEdit();
+        }
+    }
+});
+
+// 페이지 이탈 시 경고
+window.addEventListener('beforeunload', (e) => {
+    if (currentRowIdx !== null) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (FILE_ID) {
+        lockStatusManager = new LockStatusManager(FILE_ID, CURRENT_USER_ID);
+        lockStatusManager.connect();
+    }
+
+    const sidebarList = document.getElementById('sidebarList');
+    if (sidebarList) {
+        sidebarList.addEventListener('click', (e) => {
+            const li = e.target.closest('.sidebar-item');
+            if (!li) return;
+            const rowIdx = parseInt(li.dataset.rowIdx, 10);
+            const dataId = li.dataset.dataId || '';
+            selectItem(li, rowIdx, dataId);
+        });
+    }
+
+    const firstItem = document.querySelector('.sidebar-item');
+    if (firstItem) {
+        const rowIdx = parseInt(firstItem.dataset.rowIdx, 10);
+        const dataId = firstItem.dataset.dataId || '';
+        selectItem(firstItem, rowIdx, dataId);
+    }
+});
+</script>
+{% endblock %}

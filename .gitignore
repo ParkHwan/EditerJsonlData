@@ -1,0 +1,60 @@
+# ── 환경 / 시크릿 ──
+.env
+.env.local
+.env.production
+!.env.example
+.security/*.json
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# ── Data (로컬 작업 파일) ──
+data/*.jsonl
+data/.gcs_metadata.json
+data/backups/
+data/audit/
+data/snapshots/
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Docker ──
+nginx/ssl/*.crt
+nginx/ssl/*.key
+
+# ── Test / Coverage ──
+.pytest_cache/
+htmlcov/
+.coverage
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Logs ──
+logs/
+*.log
+
+# ── DuckDB ──
+data/*.duckdb
+data/*.duckdb.*
+data/*.duckdb.lock
+
+# ── Download Temp ──
+data/gcs_dl_*
+data/*.zip
+
+# ── Serena ──
+.serena/
+
+# ── Ruff Cache ──
+.ruff_cache/

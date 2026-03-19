@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}JSONL Editor{% endblock %}</title>
+
+<!-- CSRF 토큰 (Phase 3) -->
+{% if csrf_token %}
+<meta name="csrf-token" content="{{ csrf_token }}">
+{% endif %}
+
+<!-- MathJax 3: 수식 인라인 렌더링 -->
+<script>
+window.MathJax = {
+    tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+    },
+    svg: { fontCache: 'global' }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+
+<style>
+    /* ── 기본 레이아웃 ── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+        font-family: 'Segoe UI', 'Apple SD Gothic Neo', Arial, sans-serif;
+        margin: 0;
+        background: #f5f5f5;
+        color: #333;
+    }
+
+    /* ── 네비게이션 ── */
+    .navbar {
+        background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%);
+        color: white;
+        padding: 12px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+    }
+    .navbar-brand {
+        font-size: 18px;
+        font-weight: 700;
+        text-decoration: none;
+        color: white;
+    }
+    .navbar-links { display: flex; gap: 16px; align-items: center; }
+    .navbar-links a {
+        color: rgba(255,255,255,0.85);
+        text-decoration: none;
+        font-size: 14px;
+        padding: 6px 12px;
+        border-radius: 4px;
+        transition: background 0.2s;
+    }
+    .navbar-links a:hover { background: rgba(255,255,255,0.15); color: white; }
+    .navbar-links a.active { background: rgba(255,255,255,0.2); color: white; }
+
+    /* ── 컨테이너 ── */
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    /* ── 항목 카드 ── */
+    .item {
+        background: white;
+        margin: 20px 0;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: box-shadow 0.2s;
+    }
+    .item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .item.type-concept {
+        border: 4px solid #FF6F00;
+        box-shadow: 0 4px 8px rgba(255, 111, 0, 0.3);
+    }
+    .item.type-concept .header {
+        background: linear-gradient(135deg, #FF6F00 0%, #FF8F00 100%);
+    }
+    .item.type-concept .content-section {
+        border: 3px solid #FF6F00;
+        border-radius: 6px;
+        padding: 15px;
+        background: #FFF3E0;
+    }
+    .item.editing {
+        border: 3px solid #4CAF50;
+        box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+    }
+    .item.locked-by-other {
+        opacity: 0.7;
+        border: 2px dashed #f44336;
+    }
+
+    /* ── 헤더 ── */
+    .header {
+        background: #1976D2;
+        color: white;
+        padding: 10px 15px;
+        border-radius: 5px;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .header-left { display: flex; align-items: center; gap: 8px; }
+    .header-actions { display: flex; gap: 8px; }
+
+    /* ── 버튼 공통 ── */
+    .btn {
+        display: inline-block;
+        padding: 6px 16px;
+        border: none;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-edit { background: #4CAF50; color: white; padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-edit:hover { background: #388E3C; }
+    .btn-save { background: #FF9800; color: white; }
+    .btn-save:hover { background: #F57C00; }
+    .btn-cancel { background: #9E9E9E; color: white; }
+    .btn-cancel:hover { background: #757575; }
+    .btn-download { background: #1976D2; color: white; }
+    .btn-download:hover { background: #1565C0; }
+    .btn-primary { background: #1976D2; color: white; }
+    .btn-danger { background: #f44336; color: white; }
+
+    /* ── content 행 ── */
+    .content-section { margin: 15px 0; }
+    .content-row {
+        margin: 10px 0;
+        padding: 10px;
+        background: #f9f9f9;
+        border-left: 3px solid #1976D2;
+        border-radius: 0 4px 4px 0;
+    }
+
+    /* ── 메타 정보 ── */
+    .meta-info {
+        background: #E3F2FD;
+        padding: 10px 15px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-size: 13px;
+        color: #1565C0;
+    }
+    .meta-inline {
+        display: inline-block;
+        background: #FFF9C4;
+        padding: 8px 12px;
+        margin: 5px;
+        border-radius: 5px;
+        border: 2px solid #F57C00;
+        max-width: 90%;
+    }
+    .meta-key {
+        font-weight: bold;
+        color: #E65100;
+        margin-bottom: 5px;
+        font-size: 14px;
+    }
+    .meta-type-badge {
+        display: inline-block;
+        background: #FF6F00;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 11px;
+        margin-bottom: 5px;
+    }
+    .meta-title {
+        margin: 5px 0;
+        padding: 5px;
+        background: #E3F2FD;
+        border-radius: 3px;
+    }
+    .meta-pagenum {
+        margin: 5px 0;
+        padding: 3px 8px;
+        background: #C8E6C9;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+    .meta-text {
+        margin: 5px 0;
+        padding: 5px;
+        background: white;
+        border-radius: 3px;
+        border: 1px solid #ddd;
+    }
+    .meta-table-content {
+        margin: 10px 0;
+        overflow-x: auto;
+    }
+    .meta-table-content table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+    .meta-table-content table th,
+    .meta-table-content table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    .meta-table-content table th {
+        background-color: #f0f0f0;
+        font-weight: bold;
+    }
+    .meta-image { margin: 10px 0; }
+    .meta-image img {
+        max-width: 500px;
+        border: 2px solid #ddd;
+        border-radius: 4px;
+    }
+
+    /* ── 매칭 테이블 ── */
+    table.match-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0;
+    }
+    table.match-table td {
+        border: 1px solid #ddd;
+        padding: 10px;
+        width: 50%;
+        vertical-align: top;
+    }
+
+    /* ── 상세 정보 테이블 ── */
+    table.info-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 4px 0 10px;
+    }
+    table.info-table th,
+    table.info-table td {
+        border: 1px solid #ddd;
+        padding: 10px;
+        text-align: left;
+    }
+    table.info-table th {
+        font-weight: bold;
+        width: 150px;
+        color: white;
+    }
+
+    /* ── 보기 항목 ── */
+    .bogi-item {
+        padding: 6px 10px;
+        margin: 4px 0;
+        background: #f7fafa;
+        border-left: 3px solid #00838F;
+        border-radius: 3px;
+    }
+    .bogi-item strong {
+        color: #00838F;
+        margin-right: 6px;
+    }
+
+    /* ── 수식 스타일 ── */
+    .math-inline {
+        display: inline;
+        vertical-align: baseline;
+    }
+    .math-block {
+        display: inline;
+        vertical-align: baseline;
+    }
+
+    /* ── 기타 ── */
+    .tag-placeholder {
+        color: #999;
+        font-style: italic;
+    }
+    .error-msg {
+        color: #C62828;
+        background: #ffebee;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+        font-size: 13px;
+    }
+    .type-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-left: 10px;
+    }
+    .type-badge.concept { background: #FF6F00; color: white; }
+    .type-badge.other   { background: #42A5F5; color: white; }
+
+    /* ── Lock 인디케이터 ── */
+    .lock-indicator {
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 3px;
+    }
+    .lock-indicator.locked {
+        background: #FFCDD2;
+        color: #C62828;
+    }
+
+    /* ── 파일 목록 ── */
+    .file-list { list-style: none; padding: 0; }
+    .file-card {
+        background: white;
+        padding: 16px 20px;
+        margin: 8px 0;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: all 0.2s;
+        text-decoration: none;
+        color: inherit;
+    }
+    .file-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        transform: translateY(-1px);
+    }
+    .file-card-info { display: flex; flex-direction: column; gap: 4px; }
+    .file-card-name { font-weight: 600; font-size: 15px; color: #1565C0; }
+    .file-card-meta { font-size: 12px; color: #757575; }
+
+    /* ── 페이지네이션 ── */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin: 20px 0;
+    }
+    .pagination a, .pagination span {
+        padding: 6px 14px;
+        border-radius: 4px;
+        text-decoration: none;
+        font-size: 14px;
+    }
+    .pagination a { background: white; color: #1976D2; border: 1px solid #ddd; }
+    .pagination a:hover { background: #E3F2FD; }
+    .pagination .current { background: #1976D2; color: white; }
+
+    /* ── 결과 요약 ── */
+    .summary-bar {
+        padding: 12px 20px;
+        background: #E8F5E9;
+        border-radius: 8px;
+        margin: 10px 0;
+        font-size: 14px;
+    }
+
+    /* ── Toast 알림 ── */
+    .toast-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column-reverse;
+        gap: 8px;
+    }
+    .toast {
+        background: #323232;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        animation: toast-in 0.3s ease;
+        font-size: 14px;
+    }
+    .toast.success { background: #2E7D32; }
+    .toast.error { background: #C62828; }
+    .toast.warning { background: #F57F17; }
+    @keyframes toast-in {
+        from { transform: translateX(100%); opacity: 0; }
+        to   { transform: translateX(0);    opacity: 1; }
+    }
+
+    /* ── Draft 복원 배너 (Phase 3) ── */
+    .draft-banner {
+        background: #FFF3E0;
+        border: 2px solid #FF9800;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    .draft-banner-text {
+        font-size: 14px;
+        color: #E65100;
+        font-weight: 500;
+    }
+    .draft-banner-actions {
+        display: flex;
+        gap: 8px;
+    }
+    .btn-restore { background: #FF9800; color: white; }
+    .btn-restore:hover { background: #F57C00; }
+    .btn-discard { background: #BDBDBD; color: #333; }
+    .btn-discard:hover { background: #9E9E9E; color: white; }
+
+    /* ── Auto-save 인디케이터 ── */
+    .autosave-indicator {
+        font-size: 11px;
+        color: #9E9E9E;
+        margin-left: 12px;
+    }
+    .autosave-indicator.saving { color: #FF9800; }
+    .autosave-indicator.saved { color: #4CAF50; }
+
+</style>
+{% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<!-- 네비게이션 -->
+<nav class="navbar">
+    <a href="/" class="navbar-brand">JSONL Editor</a>
+    <div class="navbar-links">
+        <a href="/api/v1/view/files" class="{% block nav_files %}{% endblock %}">파일 목록</a>
+        <a href="/api/v1/gcs/history" class="{% block nav_history %}{% endblock %}">수정 이력</a>
+        {% if current_user %}
+        {% if current_user.is_admin %}
+        <a href="/api/v1/view/admin/users" class="{% block nav_admin %}{% endblock %}" style="font-size:13px;">사용자 관리</a>
+        {% endif %}
+        <span style="font-size:13px; opacity:0.85;">{{ current_user.display_name }}</span>
+        <a href="#" onclick="handleLogout()" style="font-size:13px;">로그아웃</a>
+        {% endif %}
+    </div>
+</nav>
+
+<!-- Toast 알림 컨테이너 -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- 전체 너비 콘텐츠 (에디터 등) -->
+{% block content_full %}{% endblock %}
+
+<!-- 메인 콘텐츠 (container 포함) -->
+<div class="container">
+    {% block content %}{% endblock %}
+</div>
+
+<!-- 공통 JS -->
+<script>
+// ── CSRF 토큰 유틸리티 (Phase 3) ──
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+// ── CSRF 헤더가 포함된 fetch 래퍼 ──
+function csrfFetch(url, options = {}) {
+    const csrfToken = getCsrfToken();
+    const headers = options.headers || {};
+
+    if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+    }
+
+    return fetch(url, {
+        ...options,
+        headers: headers,
+        credentials: 'same-origin'
+    });
+}
+
+// ── Toast 알림 ──
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+</script>
+
+<script>
+async function handleLogout() {
+    try {
+        await csrfFetch('/api/v1/auth/logout', { method: 'POST' });
+    } catch (e) { /* silent */ }
+    window.location.href = '/api/v1/view/login';
+}
+</script>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>

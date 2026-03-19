@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}JSONL Editor - 파일 목록{% endblock %}
+{% block nav_files %}active{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+    <h2 style="margin:0;">파일 목록</h2>
+    <span class="bucket-badge">{{ bucket_name }}</span>
+</div>
+
+<p style="color:#666; font-size:14px; margin-bottom:24px;">
+    편집할 TASK를 선택해주세요.
+</p>
+
+<div class="task-grid">
+    {% for task in tasks %}
+    <a href="/api/v1/gcs/browse?task={{ task.id }}" class="task-card task-{{ task.id }}">
+        <div class="task-icon">
+            {% if task.id == 'task1' %}📚{% elif task.id == 'task2' %}📝{% elif task.id == 'task3' %}📐{% else %}📁{% endif %}
+        </div>
+        <div class="task-info">
+            <span class="task-label">{{ task.id | upper }}</span>
+            <span class="task-name">{{ task.name }}</span>
+            <span class="task-prefix">{{ task.prefix }}/</span>
+        </div>
+        <span class="task-arrow">→</span>
+    </a>
+    {% endfor %}
+</div>
+
+<style>
+    .bucket-badge {
+        background: #E3F2FD; color: #1565C0;
+        padding: 6px 14px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+    }
+    .task-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 16px;
+    }
+    .task-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 24px;
+        background: white;
+        border-radius: 12px;
+        border: 2px solid #E0E0E0;
+        text-decoration: none;
+        color: inherit;
+        transition: all 0.2s;
+    }
+    .task-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    }
+    .task-task1:hover { border-color: #1976D2; background: #F5F9FF; }
+    .task-task2:hover { border-color: #7B1FA2; background: #FDF5FF; }
+    .task-task3:hover { border-color: #E65100; background: #FFF8F0; }
+    .task-icon {
+        font-size: 36px;
+        width: 56px; height: 56px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 12px;
+        background: #F5F5F5;
+        flex-shrink: 0;
+    }
+    .task-info {
+        display: flex; flex-direction: column; gap: 2px; flex: 1;
+    }
+    .task-label {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 1px; color: #9E9E9E;
+    }
+    .task-name {
+        font-size: 18px; font-weight: 700; color: #333;
+    }
+    .task-prefix {
+        font-size: 12px; color: #888; font-family: monospace;
+    }
+    .task-arrow {
+        font-size: 20px; color: #BDBDBD; font-weight: 700;
+        transition: transform 0.2s;
+    }
+    .task-card:hover .task-arrow {
+        transform: translateX(4px);
+        color: #666;
+    }
+</style>
+{% endblock %}

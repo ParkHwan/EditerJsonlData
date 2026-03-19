@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}{{ task_name }} — 날짜 폴더{% endblock %}
+{% block nav_files %}active{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+    <a href="/api/v1/view/files" class="btn-back">← TASK 선택</a>
+    <h2 style="margin:0;">{{ task_name }}</h2>
+    <span class="gcs-bucket-badge">
+        {{ bucket_name }} / {{ task_prefix }}/
+    </span>
+</div>
+
+{% if gcs_error %}
+<div class="gcs-alert gcs-alert-error">
+    <strong>GCS 연결 오류:</strong> {{ gcs_error }}
+    <br><small>GCS 인증 정보 또는 네트워크를 확인해주세요.</small>
+</div>
+{% endif %}
+
+<div class="gcs-section">
+    <h3 style="margin-bottom:12px;">날짜별 폴더</h3>
+    {% if folders %}
+    <div class="gcs-folder-grid">
+        {% for folder in folders %}
+        <a href="/api/v1/gcs/browse/{{ folder.name }}?task={{ task_id }}" class="gcs-folder-card">
+            <span class="gcs-folder-icon">📂</span>
+            <div class="gcs-folder-info">
+                <span class="gcs-folder-name">{{ folder.display }}</span>
+                <span class="gcs-folder-path">
+                    {% if folder.file_count %}파일 {{ folder.file_count }}개{% endif %}
+                    {% if folder.prefix %}{{ folder.prefix }}{% endif %}
+                </span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="gcs-empty">
+        {% if not gcs_error %}
+        해당 TASK에 날짜 폴더가 없습니다.
+        <br><small><code>{{ task_prefix }}/YYYYMMDD/</code> 형식으로 파일을 업로드해주세요.</small>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .btn-back {
+        text-decoration: none; color: #1976D2; font-size: 14px; font-weight: 600;
+        padding: 6px 12px; border-radius: 6px; background: #E3F2FD;
+        transition: background 0.2s;
+    }
+    .btn-back:hover { background: #BBDEFB; }
+    .gcs-bucket-badge {
+        background: #E3F2FD; color: #1565C0;
+        padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
+    }
+    .gcs-alert { padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; }
+    .gcs-alert-error { background: #FFEBEE; color: #C62828; border: 1px solid #EF9A9A; }
+    .gcs-section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .gcs-folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .gcs-folder-card {
+        display: flex; align-items: center; gap: 12px;
+        padding: 14px 16px; border-radius: 8px;
+        border: 1px solid #E0E0E0; text-decoration: none; color: #333;
+        transition: all 0.2s;
+    }
+    .gcs-folder-card:hover { border-color: #1976D2; background: #F5F9FF; box-shadow: 0 2px 8px rgba(25,118,210,0.1); }
+    .gcs-folder-icon { font-size: 28px; }
+    .gcs-folder-name { font-weight: 600; font-size: 15px; display: block; }
+    .gcs-folder-path { font-size: 12px; color: #888; display: block; margin-top: 2px; }
+    .gcs-empty { background: #FFF3E0; padding: 20px; border-radius: 8px; text-align: center; color: #E65100; }
+</style>
+{% endblock %}

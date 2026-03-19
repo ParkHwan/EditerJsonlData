@@ -1,0 +1,50 @@
+# ── 로컬 개발 환경 (Phase 7) ──
+# Redis Standalone + uvicorn --reload
+# 사용법: docker compose up -d  또는  make dev-docker
+#
+# GCS 인증 우선순위:
+#   1) .security/gcs-credentials.json (서비스 계정 키)
+#   2) 호스트 ~/.config/gcloud/ (gcloud ADC 폴백)
+
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: editer-jsonl-web
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      # GCS 인증 (1): 프로젝트 내 서비스 계정 키
+      - ./.security:/app/.security:ro
+      # GCS 인증 (2): 호스트 gcloud ADC 폴백
+      - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.local
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+  redis:
+    image: redis:7-alpine
+    container_name: editer-jsonl-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:
