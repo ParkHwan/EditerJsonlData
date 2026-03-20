@@ -4,12 +4,13 @@
 {% block nav_files %}active{% endblock %}
 
 {% block content %}
-<div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
     <a href="/api/v1/view/files" class="btn-back">← TASK 선택</a>
     <h2 style="margin:0;">{{ task_name }}</h2>
     <span class="gcs-bucket-badge">
         {{ bucket_name }} / {{ task_prefix }}/
     </span>
+    <button id="syncBtn" class="btn-sync" onclick="syncGCS()">GCS 동기화</button>
 </div>
 
 {% if gcs_error %}
@@ -72,5 +73,39 @@
     .gcs-folder-name { font-weight: 600; font-size: 15px; display: block; }
     .gcs-folder-path { font-size: 12px; color: #888; display: block; margin-top: 2px; }
     .gcs-empty { background: #FFF3E0; padding: 20px; border-radius: 8px; text-align: center; color: #E65100; }
+    .btn-sync {
+        margin-left: auto;
+        padding: 7px 16px; border-radius: 6px; border: 1px solid #43A047;
+        background: #E8F5E9; color: #2E7D32; font-weight: 600; font-size: 13px;
+        cursor: pointer; transition: all 0.2s;
+    }
+    .btn-sync:hover { background: #C8E6C9; }
+    .btn-sync:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
+
+<script>
+async function syncGCS() {
+    const btn = document.getElementById('syncBtn');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '동기화 중...';
+    try {
+        const resp = await fetch('/api/v1/gcs/sync?task={{ task_id }}', {
+            method: 'POST',
+            credentials: 'same-origin',
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        alert(`동기화 완료: 폴더 ${data.folders_synced}개, 파일 ${data.files_synced}개`);
+        location.reload();
+    } catch (e) {
+        alert('동기화 실패: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+}
+</script>
 {% endblock %}

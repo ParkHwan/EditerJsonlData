@@ -735,6 +735,18 @@ class MetadataService:
     async def has_any_folders(self, task_id: str) -> bool:
         return await asyncio.to_thread(self._has_any_folders, task_id)
 
+    def _clear_sync_record_sync(self, task_id: str) -> int:
+        """해당 TASK의 동기화 기록을 삭제하여 다음 접근 시 GCS 재동기화를 강제한다."""
+        conn = DuckDBClient.get_connection()
+        result = conn.execute(
+            "DELETE FROM registry_sync WHERE task_id = ? RETURNING task_id",
+            [task_id],
+        ).fetchall()
+        return len(result)
+
+    async def clear_sync_record(self, task_id: str) -> int:
+        return await asyncio.to_thread(self._clear_sync_record_sync, task_id)
+
     # ------------------------------------------------------------------
     # 다운로드 이력 (Phase 12)
     # ------------------------------------------------------------------

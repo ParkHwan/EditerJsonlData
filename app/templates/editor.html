@@ -645,8 +645,8 @@ async function selectItem(el, rowIdx, dataId) {
         if (!resp.ok) throw new Error('카드 로드 실패');
         container.innerHTML = await resp.text();
 
-        if (window.MathJax && window.MathJax.typesetPromise) {
-            window.MathJax.typesetPromise([container]);
+        if (window.renderMathInElement && window.__katexOptions) {
+            renderMathInElement(container, window.__katexOptions);
         }
     } catch (e) {
         container.innerHTML = `<div class="error-msg">카드 로드 실패: ${e.message}</div>`;
@@ -1195,9 +1195,9 @@ async function cancelEdit() {
         const status = card.querySelector('.inline-edit-status');
         if (status) status.textContent = '';
 
-        // MathJax 재렌더링
-        if (window.MathJax && window.MathJax.typesetPromise) {
-            window.MathJax.typesetPromise([card]);
+        // KaTeX 재렌더링
+        if (window.renderMathInElement && window.__katexOptions) {
+            renderMathInElement(card, window.__katexOptions);
         }
     }
 

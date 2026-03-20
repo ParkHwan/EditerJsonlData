@@ -24,7 +24,9 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import hmac
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
@@ -73,6 +75,57 @@ async def _background_folder_sync(task: str) -> None:
         logger.info("Background GCS → DuckDB sync completed: task=%s folders=%d", task, len(gcs_folders))
     except Exception as e:
         logger.warning("Background GCS → DuckDB sync failed: task=%s error=%s", task, e)
+
+
+@router.post("/sync")
+@limiter.limit("5/minute")
+async def gcs_sync(
+    request: Request,
+    task: str = "",
+    x_sync_key: str | None = Header(None),
+    current_user: dict[str, Any] | None = Depends(get_optional_user),
+):
+    """GCS → DuckDB 수동 동기화 API.
+
+    registry_sync 기록을 초기화한 뒤 GCS에서 폴더/파일 목록을 다시 가져와 DuckDB에 저장한다.
+    인증: 세션 쿠키 또는 X-Sync-Key 헤더 중 하나가 필요하다.
+    """
+    caller = "api-key"
+    if x_sync_key and settings.SYNC_API_KEY:
+        if not hmac.compare_digest(x_sync_key, settings.SYNC_API_KEY):
+            raise HTTPException(status_code=403, detail="유효하지 않은 API 키입니다")
+    elif current_user:
+        caller = current_user["user_id"]
+    else:
+        raise HTTPException(status_code=401, detail="인증이 필요합니다 (세션 쿠키 또는 X-Sync-Key 헤더)")
+
+    if not task or task not in settings.GCS_TASKS:
+        raise HTTPException(status_code=400, detail="유효한 task 파라미터가 필요합니다")
+
+    cleared = await metadata_service.clear_sync_record(task)
+    logger.info("Sync record cleared: task=%s rows=%d by %s", task, cleared, caller)
+
+    total_folders = 0
+    total_files = 0
+    try:
+        gcs_folders = await gcs_service.list_date_folders(task_id=task)
+        for folder in gcs_folders:
+            gcs_files = await gcs_service.list_files(folder["name"], task_id=task)
+            if gcs_files:
+                synced = await metadata_service.sync_files_from_gcs(task, folder["name"], gcs_files)
+                total_files += synced
+        total_folders = len(gcs_folders)
+        logger.info("Manual GCS sync completed: task=%s folders=%d files=%d", task, total_folders, total_files)
+    except Exception as e:
+        logger.error("Manual GCS sync failed: task=%s error=%s", task, e)
+        raise HTTPException(status_code=502, detail=f"GCS 동기화 실패: {e}")
+
+    return {
+        "status": "ok",
+        "task": task,
+        "folders_synced": total_folders,
+        "files_synced": total_files,
+    }
 
 
 @router.get("/browse", response_class=HTMLResponse)

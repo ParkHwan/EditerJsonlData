@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     # DuckDB (Phase 10)
     DUCKDB_PATH: str = "data/editor.duckdb"
 
+    # Sync API Key (스크립트에서 세션 없이 동기화 호출용)
+    SYNC_API_KEY: str = ""
+
     # TASK별 GCS prefix 매핑 (Phase 9)
     GCS_TASKS: dict[str, dict[str, str]] = {
         "task1": {"name": "교재", "prefix": "manual/PROJ-14768/TASK1"},    

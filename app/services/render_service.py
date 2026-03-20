@@ -1,7 +1,7 @@
 """JSONL 콘텐츠 렌더링 서비스
 
 PM 스크립트(JJIn_last.py)의 렌더링 로직을 서비스 계층으로 포팅.
-- 수식(MathJax) 보존
+- 수식(KaTeX) 보존
 - content_meta 태그 인라인 렌더링
 - 이미지 base64 변환 (로컬) / GCS 프록시 URL (Phase 6-1)
 - 매칭 테이블 / 보기 / 선택지 렌더링
@@ -78,7 +78,7 @@ def protect_math_expressions(text: str) -> tuple[str, dict[str, str]]:
 
 
 def restore_math_expressions(html: str, placeholders: dict[str, str]) -> str:
-    r"""플레이스홀더를 MathJax 렌더링 가능 형태로 복원
+    r"""플레이스홀더를 KaTeX 렌더링 가능 형태로 복원
 
     $$...$$ → <span class="math-block">\(...\)</span>
     $...$   → <span class="math-inline">\(...\)</span>

@@ -3,7 +3,7 @@ name = "editer-jsonl"
 version = "0.1.0"
 description = "Web-based JSONL Editor with Row-level Locking and High Availability"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 authors = [
     { name = "kanjanggun", email = "kanjanggun@gmail.com" }
 ]
@@ -50,7 +50,7 @@ packages = ["app"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]

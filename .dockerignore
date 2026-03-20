@@ -1,0 +1,55 @@
+# ── Git ──
+.git
+.gitignore
+
+# ── Python 런타임/캐시 ──
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist
+build
+
+# ── 테스트/린트/커버리지 ──
+tests
+htmlcov
+.coverage
+.pytest_cache
+.ruff_cache
+
+# ── 문서 ──
+docs
+README.md
+
+# ── IDE / 도구 ──
+.serena
+.vscode
+.idea
+*.swp
+*.swo
+
+# ── 환경 변수 / 시크릿 ──
+.env
+.env.local
+.env.production
+.env.example
+.security
+
+# ── 데이터 (런타임 볼륨 마운트) ──
+data
+
+# ── Docker/Infra 설정 (컨테이너 내부 불필요) ──
+docker-compose.yml
+docker-compose.prod.yml
+Makefile
+nginx
+redis
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── 로그 ──
+logs
+*.log

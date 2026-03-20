@@ -10,18 +10,33 @@
 <meta name="csrf-token" content="{{ csrf_token }}">
 {% endif %}
 
-<!-- MathJax 3: 수식 인라인 렌더링 -->
+<!-- KaTeX: 수식 렌더링 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"></script>
 <script>
-window.MathJax = {
-    tex: {
-        inlineMath: [['\\(', '\\)']],
-        displayMath: [['\\[', '\\]']],
-        processEscapes: true
-    },
-    svg: { fontCache: 'global' }
-};
+document.addEventListener('DOMContentLoaded', function() {
+    window.__katexOptions = {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false},
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+        ],
+        throwOnError: false,
+        errorColor: '#cc0000',
+        strict: false,
+        trust: false,
+        macros: {
+            "\\textrm": "\\mathrm",
+            "\\textbf": "\\mathbf"
+        }
+    };
+    if (window.renderMathInElement) {
+        renderMathInElement(document.body, window.__katexOptions);
+    }
+});
 </script>
-<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
 
 <style>
     /* ── 기본 레이아웃 ── */
