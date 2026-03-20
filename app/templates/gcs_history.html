@@ -438,6 +438,10 @@ async function runDiff() {
         });
         itemsEl.innerHTML = html;
 
+        if (window.renderMathInElement && window.__katexOptions) {
+            renderMathInElement(itemsEl, window.__katexOptions);
+        }
+
     } catch (e) {
         document.getElementById('diffSummary').innerHTML = `<span style="color:#C62828;">오류: ${e.message}</span>`;
     }

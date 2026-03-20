@@ -59,38 +59,34 @@ def escape_html(text: Any) -> str:
 
 
 def protect_math_expressions(text: str) -> tuple[str, dict[str, str]]:
-    """수식($...$, $$...$$)을 플레이스홀더로 치환하여 escape 시 보존"""
+    """수식($...$)을 플레이스홀더로 치환하여 HTML escape 시 보존.
+
+    $...$만 매칭하고 $$는 인접한 인라인 수식의 경계로 취급한다.
+    KaTeX 클라이언트가 $/$$ 구분자를 직접 처리하므로 서버에서는
+    HTML 이스케이프 방지 용도로만 사용한다.
+    """
     placeholders: dict[str, str] = {}
     counter = [0]
 
     def _replace(m: re.Match[str]) -> str:
-        key = f"__MATH_PLACEHOLDER_{counter[0]}__"
+        key = f"__MATH_PH_{counter[0]}__"
         placeholders[key] = m.group(0)
         counter[0] += 1
         return key
 
-    # $$...$$ 블록 수식 먼저 (우선순위 높음)
-    text = re.sub(r"\$\$(.+?)\$\$", _replace, text, flags=re.DOTALL)
-    # $...$ 인라인 수식
     text = re.sub(r"\$(.+?)\$", _replace, text)
 
     return text, placeholders
 
 
 def restore_math_expressions(html: str, placeholders: dict[str, str]) -> str:
-    r"""플레이스홀더를 KaTeX 렌더링 가능 형태로 복원
+    r"""플레이스홀더를 원래 $...$ 수식으로 복원.
 
-    $$...$$ → <span class="math-block">\(...\)</span>
-    $...$   → <span class="math-inline">\(...\)</span>
+    KaTeX auto-render가 클라이언트에서 $...$ 구분자를 직접 파싱하므로
+    서버에서는 원본 그대로 복원한다.
     """
     for key, original in placeholders.items():
-        if original.startswith("$$") and original.endswith("$$"):
-            inner = original[2:-2].strip()
-            rendered = f'<span class="math-block">\\({inner}\\)</span>'
-        else:
-            inner = original[1:-1].strip()
-            rendered = f'<span class="math-inline">\\({inner}\\)</span>'
-        html = html.replace(key, rendered)
+        html = html.replace(key, original)
     return html
 
 
