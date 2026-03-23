@@ -147,10 +147,16 @@ async def view_file(
     safe_id = Path(file_id).name
     is_gcs_mode = mode == "gcs" and await gcs_edit_service.is_loaded(safe_id)
 
+    gcs_task = ""
     if is_gcs_mode:
         data_id_list = await gcs_edit_service.get_data_id_list(safe_id)
         meta = await gcs_edit_service.get_meta(safe_id)
         date_str = gcs_date.strip() or (meta.get("date_str", "") if meta else "")
+        gcs_path = meta.get("gcs_path", "") if meta else ""
+        for tid, tinfo in settings.GCS_TASKS.items():
+            if gcs_path.startswith(tinfo["prefix"]):
+                gcs_task = tid
+                break
     else:
         file_path = Path(settings.DATA_DIR) / f"{safe_id}.jsonl"
         if not file_path.exists():
@@ -189,6 +195,7 @@ async def view_file(
             "csrf_token": csrf_token,
             "auto_save_interval": settings.DRAFT_AUTO_SAVE_INTERVAL,
             "gcs_date": date_str,
+            "gcs_task": gcs_task,
             "edit_mode": "gcs" if is_gcs_mode else "local",
         },
     )

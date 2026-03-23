@@ -189,23 +189,12 @@
     font-size: 13px;
     transition: all 0.2s;
 }
-.btn-file-lock.start {
-    background: #1976D2;
-    color: white;
-}
-.btn-file-lock.start:hover {
-    background: #1565C0;
-}
 .btn-file-lock.end {
     background: #F44336;
     color: white;
 }
 .btn-file-lock.end:hover {
     background: #D32F2F;
-}
-.btn-file-lock:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 /* ── 버튼 스타일 ── */
@@ -515,6 +504,32 @@ td.editable-value[contenteditable="true"] {
 .new-key-row td {
     background: #E8F5E9 !important;
 }
+.key-input-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4); display: flex; align-items: center;
+    justify-content: center; z-index: 9999;
+}
+.key-input-dialog {
+    background: white; border-radius: 10px; padding: 24px; min-width: 340px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.key-input-dialog h4 { margin: 0 0 14px; font-size: 15px; color: #333; }
+.key-input-dialog input {
+    width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px;
+    font-size: 14px; outline: none; box-sizing: border-box;
+}
+.key-input-dialog input:focus { border-color: #1976D2; box-shadow: 0 0 0 2px rgba(25,118,210,0.15); }
+.key-input-dialog .dialog-actions {
+    display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px;
+}
+.key-input-dialog .dialog-actions button {
+    padding: 8px 18px; border: none; border-radius: 6px; font-size: 13px;
+    font-weight: 600; cursor: pointer;
+}
+.key-input-dialog .btn-dialog-ok { background: #1976D2; color: white; }
+.key-input-dialog .btn-dialog-ok:hover { background: #1565C0; }
+.key-input-dialog .btn-dialog-cancel { background: #E0E0E0; color: #555; }
+.key-input-dialog .btn-dialog-cancel:hover { background: #BDBDBD; }
 .section-block {
     margin-bottom: 8px;
 }
@@ -546,8 +561,8 @@ td.editable-value[contenteditable="true"] {
     <div class="detail-panel" id="detailPanel">
         <!-- 파일 Lock 상태 배너 -->
         <div class="file-lock-banner unlocked" id="fileLockBanner">
-            <span id="fileLockText">파일을 편집하려면 '편집 시작' 버튼을 누르세요.</span>
-            <button class="btn-file-lock start" id="btnFileLock" onclick="toggleFileLock()">🔓 편집 시작</button>
+            <span id="fileLockText">🔒 편집 잠금 획득 중...</span>
+            <button class="btn-file-lock end" id="btnFileLock" onclick="releaseFileLock()" style="display:none;">🔓 편집 종료</button>
         </div>
 
         <div class="detail-placeholder" id="detailPlaceholder">
@@ -585,6 +600,7 @@ const API_V1_STR = "/api/v1";
 const CURRENT_USER_ID = "{{ current_user.user_id | default('') | e }}";
 const AUTO_SAVE_INTERVAL = parseInt("{{ auto_save_interval | default(30) }}", 10);
 const GCS_DATE = "{{ gcs_date | default('') | e }}";
+const GCS_TASK = "{{ gcs_task | default('') | e }}";
 const EDIT_MODE = "{{ edit_mode | default('local') | e }}";
 
 let currentRowIdx = null;
@@ -617,19 +633,16 @@ function updateFileLockUI() {
         text.textContent = '🔒 편집 모드 — 편집이 완료되면 편집 종료를 눌러주세요.';
         btn.textContent = '🔓 편집 종료';
         btn.className = 'btn-file-lock end';
+        btn.style.display = '';
         btn.disabled = false;
     } else if (fileLockOwner) {
         banner.classList.add('locked-by-other');
         text.textContent = `🔒 ${fileLockOwner}님이 편집 중입니다. 열람만 가능합니다.`;
-        btn.textContent = '편집 불가';
-        btn.className = 'btn-file-lock start';
-        btn.disabled = true;
+        btn.style.display = 'none';
     } else {
         banner.classList.add('unlocked');
-        text.textContent = '파일을 편집하려면 \'편집 시작\' 버튼을 누르세요.';
-        btn.textContent = '🔓 편집 시작';
-        btn.className = 'btn-file-lock start';
-        btn.disabled = false;
+        text.textContent = '🔒 편집 잠금 획득 중...';
+        btn.style.display = 'none';
     }
 
     document.querySelectorAll('.btn-edit').forEach(b => {
@@ -637,15 +650,9 @@ function updateFileLockUI() {
     });
 }
 
-async function toggleFileLock() {
-    if (isFileLockedByMe) {
-        await releaseFileLock();
-    } else {
-        await acquireFileLock();
-    }
-}
-
 async function acquireFileLock() {
+    if (isFileLockedByMe) return;
+
     try {
         const resp = await csrfFetch(`${API_V1_STR}/editor/lock/${FILE_ID}`, {
             method: 'POST',
@@ -665,20 +672,25 @@ async function acquireFileLock() {
         isFileLockedByMe = true;
         fileLockOwner = CURRENT_USER_ID;
         updateFileLockUI();
-        showToast('편집 모드 시작 — 이제 항목을 자유롭게 편집할 수 있습니다.', 'success');
 
         heartbeatInterval = setInterval(sendHeartbeat, 30000);
     } catch (e) {
-        showToast('편집 시작 실패: ' + e.message, 'error');
+        showToast('편집 잠금 획득 실패: ' + e.message, 'error');
     }
 }
 
 async function releaseFileLock() {
     if (currentRowIdx !== null) {
-        if (!confirm('편집 중인 항목이 있습니다. 편집을 종료하시겠습니까?\n저장하지 않은 변경사항은 사라집니다.')) {
-            return;
+        const doSave = confirm(
+            '편집 중인 항목이 있습니다.\n\n'
+            + '확인 → 현재 변경사항을 저장 후 종료\n'
+            + '취소 → 변경사항 무시 후 종료'
+        );
+        if (doSave) {
+            await saveEdit();
+        } else {
+            await cancelEdit();
         }
-        await cancelEdit();
     }
 
     try {
@@ -692,11 +704,19 @@ async function releaseFileLock() {
         clearInterval(heartbeatInterval);
         heartbeatInterval = null;
     }
+    if (lockStatusManager) {
+        lockStatusManager.disconnect();
+    }
 
     isFileLockedByMe = false;
     fileLockOwner = null;
-    updateFileLockUI();
-    showToast('편집 종료', 'info');
+
+    if (EDIT_MODE === 'gcs' && GCS_DATE) {
+        const taskParam = GCS_TASK ? `?task=${GCS_TASK}` : '';
+        window.location.href = `${API_V1_STR}/gcs/browse/${GCS_DATE}${taskParam}`;
+    } else {
+        window.location.href = `${API_V1_STR}/view/files`;
+    }
 }
 
 // ── WebSocket Lock 상태 실시간 ──
@@ -729,6 +749,7 @@ class LockStatusManager {
                     } else {
                         fileLockOwner = null;
                         isFileLockedByMe = false;
+                        acquireFileLock();
                     }
                     updateFileLockUI();
                 } else if (data.type === 'lock_change') {
@@ -847,7 +868,7 @@ async function selectItem(el, rowIdx, dataId) {
 // ══════════════════════════════════════════════
 async function startRowEdit(dataId, rowIdx) {
     if (!isFileLockedByMe) {
-        showToast('먼저 \'편집 시작\' 버튼을 눌러 파일 잠금을 획득하세요.', 'warning');
+        showToast('다른 사용자가 편집 중이거나 잠금 획득에 실패했습니다. 페이지를 새로고침 해주세요.', 'warning');
         return;
     }
 
@@ -1249,48 +1270,88 @@ function showSaveConfirm(validation) {
 function addKeyToSection(sectionPath) {
     if (currentRowIdx === null || !rawEditData) return;
 
-    const newKey = prompt('추가할 키 이름을 입력하세요:');
-    if (!newKey || !newKey.trim()) return;
-    const key = newKey.trim();
+    showKeyInputDialog('추가할 키 이름을 입력하세요', (key) => {
+        const sectionData = getNestedValue(rawEditData, sectionPath);
+        if (sectionData && typeof sectionData === 'object' && key in sectionData && !deletedKeys.has(`${sectionPath}.${key}`)) {
+            alert(`'${key}' 키가 이미 존재합니다. 다른 이름을 사용하세요.`);
+            return;
+        }
 
-    const sectionData = getNestedValue(rawEditData, sectionPath);
-    if (sectionData && typeof sectionData === 'object' && key in sectionData && !deletedKeys.has(`${sectionPath}.${key}`)) {
-        alert(`'${key}' 키가 이미 존재합니다. 다른 이름을 사용하세요.`);
-        return;
-    }
+        if (addedKeys.has(`${sectionPath}.${key}`)) {
+            alert(`'${key}' 키가 이미 추가되었습니다.`);
+            return;
+        }
 
-    if (addedKeys.has(`${sectionPath}.${key}`)) {
-        alert(`'${key}' 키가 이미 추가되었습니다.`);
-        return;
-    }
+        const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+        if (!card) return;
+        const sectionBlock = card.querySelector(`[data-section="${sectionPath}"]`);
+        if (!sectionBlock) return;
+        const table = sectionBlock.querySelector('.info-table');
+        if (!table) return;
 
-    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
-    if (!card) return;
-    const sectionBlock = card.querySelector(`[data-section="${sectionPath}"]`);
-    if (!sectionBlock) return;
-    const table = sectionBlock.querySelector('.info-table');
-    if (!table) return;
+        const fieldPath = `${sectionPath}.${key}`;
+        const tr = document.createElement('tr');
+        tr.dataset.key = key;
+        tr.className = 'new-key-row';
+        tr.innerHTML = `
+            <th style="background-color:#757575;color:white;">
+                ${escapeHtml(key)}
+                <button class="btn-delete-key" onclick="deleteKeyFromSection('${sectionPath}', '${escapeHtml(key)}')" title="키 삭제">×</button>
+            </th>
+            <td class="editable-value" data-field="${escapeHtml(fieldPath)}" data-editing="true" contenteditable="true" style="background-color:#E8F5E9;"></td>
+        `;
 
-    const fieldPath = `${sectionPath}.${key}`;
-    const tr = document.createElement('tr');
-    tr.dataset.key = key;
-    tr.className = 'new-key-row';
-    tr.innerHTML = `
-        <th style="background-color:#757575;color:white;">
-            ${escapeHtml(key)}
-            <button class="btn-delete-key" onclick="deleteKeyFromSection('${sectionPath}', '${escapeHtml(key)}')" title="키 삭제">×</button>
-        </th>
-        <td class="editable-value" data-field="${escapeHtml(fieldPath)}" data-editing="true" contenteditable="true" style="background-color:#E8F5E9;"></td>
+        table.appendChild(tr);
+        addedKeys.set(fieldPath, '');
+        originalTypeMap[fieldPath] = 'string';
+
+        const td = tr.querySelector('td');
+        if (td) td.focus();
+
+        showToast(`'${key}' 키가 추가되었습니다.`, 'success');
+    });
+}
+
+function showKeyInputDialog(message, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.className = 'key-input-overlay';
+    overlay.innerHTML = `
+        <div class="key-input-dialog">
+            <h4>${escapeHtml(message)}</h4>
+            <input type="text" id="keyInputField" placeholder="키 이름 입력" autocomplete="off" />
+            <div class="dialog-actions">
+                <button class="btn-dialog-cancel" id="keyInputCancel">취소</button>
+                <button class="btn-dialog-ok" id="keyInputOk">확인</button>
+            </div>
+        </div>
     `;
+    document.body.appendChild(overlay);
 
-    table.appendChild(tr);
-    addedKeys.set(fieldPath, '');
-    originalTypeMap[fieldPath] = 'string';
+    const input = overlay.querySelector('#keyInputField');
+    const btnOk = overlay.querySelector('#keyInputOk');
+    const btnCancel = overlay.querySelector('#keyInputCancel');
 
-    const td = tr.querySelector('td');
-    if (td) td.focus();
+    input.focus();
 
-    showToast(`'${key}' 키가 추가되었습니다.`, 'success');
+    function submit() {
+        const value = input.value.trim();
+        overlay.remove();
+        if (value) onConfirm(value);
+    }
+
+    function close() {
+        overlay.remove();
+    }
+
+    btnOk.addEventListener('click', submit);
+    btnCancel.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close();
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.isComposing) submit();
+        if (e.key === 'Escape') close();
+    });
 }
 
 function deleteKeyFromSection(sectionPath, key) {
@@ -1722,8 +1783,13 @@ async function discardWorkingCopy() {
             isFileLockedByMe = false;
             fileLockOwner = null;
             if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+            if (lockStatusManager) { lockStatusManager.disconnect(); }
             showToast(data.message || '편집 세션 취소됨', 'success');
-            setTimeout(() => { window.location.href = `${API_V1_STR}/gcs/browse`; }, 1000);
+            const taskParam = GCS_TASK ? `?task=${GCS_TASK}` : '';
+            const backUrl = GCS_DATE
+                ? `${API_V1_STR}/gcs/browse/${GCS_DATE}${taskParam}`
+                : `${API_V1_STR}/gcs/browse${taskParam}`;
+            setTimeout(() => { window.location.href = backUrl; }, 1000);
         } else {
             showToast(data.detail || '취소 실패', 'error');
         }
@@ -1791,10 +1857,12 @@ window.addEventListener('unload', () => {
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     if (FILE_ID) {
         lockStatusManager = new LockStatusManager(FILE_ID, CURRENT_USER_ID);
         lockStatusManager.connect();
+
+        await acquireFileLock();
     }
 
     const sidebarList = document.getElementById('sidebarList');

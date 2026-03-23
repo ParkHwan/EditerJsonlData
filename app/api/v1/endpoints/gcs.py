@@ -616,6 +616,9 @@ async def open_gcs_for_edit(
 ):
     """GCS JSONL을 Redis로 로드하여 편집 세션 시작 (로컬 다운로드 없음)
 
+    기존 working copy가 Redis에 남아있으면 GCS에서 다시 로드하지 않고 재사용한다.
+    (편집 종료 후 재진입 시 이전 수정사항 보존)
+
     Returns:
         file_id, total_rows, editor_url
     """
@@ -626,16 +629,22 @@ async def open_gcs_for_edit(
         raise HTTPException(status_code=400, detail="JSONL 파일만 지원합니다.")
     file_id = filename[:-6]
 
-    try:
-        total_rows = await gcs_edit_service.load_from_gcs(
-            file_id=file_id,
-            gcs_path=body.gcs_path,
-            date_str=body.date_str,
-        )
-    except NotFound:
-        raise HTTPException(status_code=404, detail="GCS 파일을 찾을 수 없습니다.")
-    except GoogleCloudError as e:
-        raise HTTPException(status_code=502, detail=f"GCS 로드 실패: {e}")
+    resumed = False
+    if await gcs_edit_service.is_loaded(file_id):
+        meta = await gcs_edit_service.get_meta(file_id)
+        total_rows = int(meta["total_rows"]) if meta else 0
+        resumed = True
+    else:
+        try:
+            total_rows = await gcs_edit_service.load_from_gcs(
+                file_id=file_id,
+                gcs_path=body.gcs_path,
+                date_str=body.date_str,
+            )
+        except NotFound:
+            raise HTTPException(status_code=404, detail="GCS 파일을 찾을 수 없습니다.")
+        except GoogleCloudError as e:
+            raise HTTPException(status_code=502, detail=f"GCS 로드 실패: {e}")
 
     await audit_service.log(
         action="gcs_download",
@@ -643,27 +652,30 @@ async def open_gcs_for_edit(
         user_id=current_user["user_id"],
         display_name=current_user.get("display_name", ""),
         file_id=file_id,
-        metadata={"gcs_path": body.gcs_path, "mode": "redis_working_copy"},
+        metadata={"gcs_path": body.gcs_path, "mode": "redis_working_copy", "resumed": resumed},
     )
 
-    try:
-        await metadata_service.on_session_start(
-            gcs_path=body.gcs_path,
-            user_id=current_user["user_id"],
-            display_name=current_user.get("display_name", ""),
-            total_rows=total_rows,
-        )
-    except Exception as e:
-        logger.warning("DuckDB session_start record failed (non-blocking): %s", e)
+    if not resumed:
+        try:
+            await metadata_service.on_session_start(
+                gcs_path=body.gcs_path,
+                user_id=current_user["user_id"],
+                display_name=current_user.get("display_name", ""),
+                total_rows=total_rows,
+            )
+        except Exception as e:
+            logger.warning("DuckDB session_start record failed (non-blocking): %s", e)
 
     editor_url = f"{settings.API_V1_STR}/view/files/{file_id}?gcs_date={body.date_str}&mode=gcs"
+    msg = f"{filename} 편집 세션 복원 ({total_rows}행)" if resumed else f"{filename} 편집 세션 시작 ({total_rows}행)"
 
     return {
         "status": "success",
         "file_id": file_id,
         "total_rows": total_rows,
         "editor_url": editor_url,
-        "message": f"{filename} 편집 세션 시작 ({total_rows}행)",
+        "resumed": resumed,
+        "message": msg,
     }
 
 
