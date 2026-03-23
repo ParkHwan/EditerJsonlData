@@ -8,6 +8,8 @@ GCS 모드 (Redis working copy):
     data/*.jsonl → LineIndex 기반 Random Access → Atomic Write
 
 모드 판별: gcs_edit_service.is_loaded(file_id) → True면 GCS 모드
+
+Lock: 파일 단위 Lock (한 사용자가 파일 편집 중이면 다른 사용자 편집 불가)
 """
 
 from __future__ import annotations
@@ -43,24 +45,23 @@ class SaveRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Locking Endpoints
+# Locking Endpoints (파일 단위)
 # ---------------------------------------------------------------------------
-@router.post("/lock/{file_id}/{row_idx}", response_model=LockResponse)
+@router.post("/lock/{file_id}", response_model=LockResponse)
 @limiter.limit("30/minute")
 async def acquire_lock(
     request: Request,
     file_id: str,
-    row_idx: int,
     csrf_protect: CsrfProtect = Depends(),
     lock_service: LockService = Depends(get_lock_service),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """Lock 획득 (동일 사용자면 TTL 갱신)"""
+    """파일 단위 Lock 획득 (동일 사용자면 TTL 갱신)"""
     await csrf_protect.validate_csrf(request)
     user_id = current_user["user_id"]
-    success = await lock_service.acquire_lock(file_id, row_idx, user_id)
+    success = await lock_service.acquire_lock(file_id, user_id)
     if not success:
-        current_owner = await lock_service.check_lock(file_id, row_idx)
+        current_owner = await lock_service.check_lock(file_id)
         raise HTTPException(
             status_code=409, detail=f"다른 사용자가 편집 중입니다: {current_owner}"
         )
@@ -71,7 +72,6 @@ async def acquire_lock(
         user_id=user_id,
         display_name=current_user.get("display_name", ""),
         file_id=file_id,
-        row_idx=row_idx,
     )
 
     await ws_manager.broadcast(
@@ -79,7 +79,6 @@ async def acquire_lock(
         {
             "type": "lock_change",
             "action": "acquired",
-            "row_idx": row_idx,
             "user_id": user_id,
             "display_name": current_user.get("display_name", ""),
         },
@@ -87,56 +86,53 @@ async def acquire_lock(
 
     return LockResponse(
         success=True,
-        message="Lock acquired",
+        message="File lock acquired",
         remaining_seconds=LockService.LOCK_TTL,
     )
 
 
-@router.post("/lock/{file_id}/{row_idx}/heartbeat", response_model=LockResponse)
+@router.post("/lock/{file_id}/heartbeat", response_model=LockResponse)
 async def lock_heartbeat(
     request: Request,
     file_id: str,
-    row_idx: int,
     lock_service: LockService = Depends(get_lock_service),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     """Lock TTL 연장"""
     user_id = current_user["user_id"]
-    ttl = await lock_service.heartbeat(file_id, row_idx, user_id)
+    ttl = await lock_service.heartbeat(file_id, user_id)
     return LockResponse(success=True, message="Lock extended", remaining_seconds=ttl)
 
 
-@router.delete("/lock/{file_id}/{row_idx}")
+@router.delete("/lock/{file_id}")
 async def release_lock(
     request: Request,
     file_id: str,
-    row_idx: int,
     csrf_protect: CsrfProtect = Depends(),
     lock_service: LockService = Depends(get_lock_service),
     draft_service: DraftService = Depends(get_draft_service),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """Lock 해제 + Draft 삭제"""
+    """파일 Lock 해제 + 해당 파일의 모든 Draft 삭제"""
     await csrf_protect.validate_csrf(request)
     user_id = current_user["user_id"]
-    await lock_service.release_lock(file_id, row_idx, user_id)
-    await draft_service.delete_draft(file_id, row_idx, user_id)
+    await lock_service.release_lock(file_id, user_id)
+    await draft_service.delete_all_drafts_for_file(file_id, user_id)
 
     await audit_service.log(
-        action="edit_cancel",
+        action="edit_end",
         request=request,
         user_id=user_id,
         display_name=current_user.get("display_name", ""),
         file_id=file_id,
-        row_idx=row_idx,
     )
 
     await ws_manager.broadcast(
         file_id,
-        {"type": "lock_change", "action": "released", "row_idx": row_idx},
+        {"type": "lock_change", "action": "released", "user_id": user_id},
     )
 
-    return {"success": True, "message": "Lock released"}
+    return {"success": True, "message": "File lock released"}
 
 
 # ---------------------------------------------------------------------------
@@ -184,13 +180,13 @@ async def save_data(
     current_user: dict[str, Any] = Depends(get_current_user),
     pending_tracker: PendingTaskTracker = Depends(get_pending_tracker),
 ):
-    """Row 저장 — GCS 모드면 Redis에만 저장, 로컬 모드면 파일에 저장"""
+    """Row 저장 — 파일 Lock 소유자만 가능. Lock은 유지됨 (해제하지 않음)."""
     await csrf_protect.validate_csrf(request)
     user_id = current_user["user_id"]
 
-    current_owner = await lock_service.check_lock(file_id, row_idx)
+    current_owner = await lock_service.check_lock(file_id)
     if current_owner != user_id:
-        raise HTTPException(status_code=403, detail="Lock을 보유하고 있지 않습니다.")
+        raise HTTPException(status_code=403, detail="파일 Lock을 보유하고 있지 않습니다.")
 
     is_gcs = await gcs_edit_service.is_loaded(file_id)
 
@@ -210,7 +206,6 @@ async def save_data(
             )
 
         await draft_service.delete_draft(file_id, row_idx, user_id)
-        await lock_service.release_lock(file_id, row_idx, user_id)
 
         await audit_service.log(
             action="edit_save",
@@ -238,11 +233,6 @@ async def save_data(
             except Exception as e:
                 logger.warning("DuckDB row_save record failed (non-blocking): %s", e)
 
-        await ws_manager.broadcast(
-            file_id,
-            {"type": "lock_change", "action": "released", "row_idx": row_idx},
-        )
-
         return {
             "success": True,
             "data": updated_data,
@@ -259,10 +249,13 @@ async def publish_to_gcs(
     request: Request,
     file_id: str,
     csrf_protect: CsrfProtect = Depends(),
+    lock_service: LockService = Depends(get_lock_service),
+    draft_service: DraftService = Depends(get_draft_service),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """Redis working copy를 GCS에 최종 업데이트 (덮어쓰기)"""
+    """Redis working copy를 GCS에 최종 업데이트 (덮어쓰기) + 파일 Lock 해제"""
     await csrf_protect.validate_csrf(request)
+    user_id = current_user["user_id"]
 
     if not await gcs_edit_service.is_loaded(file_id):
         raise HTTPException(status_code=404, detail="GCS 편집 세션을 찾을 수 없습니다.")
@@ -273,10 +266,13 @@ async def publish_to_gcs(
         logger.error(f"GCS update failed: {file_id}: {e}")
         raise HTTPException(status_code=502, detail=f"GCS 업데이트 실패: {e}")
 
+    await lock_service.release_lock(file_id, user_id)
+    await draft_service.delete_all_drafts_for_file(file_id, user_id)
+
     await audit_service.log(
         action="gcs_upload",
         request=request,
-        user_id=current_user["user_id"],
+        user_id=user_id,
         display_name=current_user.get("display_name", ""),
         file_id=file_id,
         metadata={"gcs_path": gcs_path, "action": "publish"},
@@ -287,12 +283,17 @@ async def publish_to_gcs(
         total_rows = int(meta.get("total_rows", 0)) if meta else 0
         await metadata_service.on_gcs_update(
             gcs_path=gcs_path,
-            user_id=current_user["user_id"],
+            user_id=user_id,
             display_name=current_user.get("display_name", ""),
             total_rows=total_rows,
         )
     except Exception as e:
         logger.warning("DuckDB gcs_update record failed (non-blocking): %s", e)
+
+    await ws_manager.broadcast(
+        file_id,
+        {"type": "lock_change", "action": "released", "user_id": user_id},
+    )
 
     return {
         "success": True,
@@ -307,10 +308,13 @@ async def discard_working_copy(
     request: Request,
     file_id: str,
     csrf_protect: CsrfProtect = Depends(),
+    lock_service: LockService = Depends(get_lock_service),
+    draft_service: DraftService = Depends(get_draft_service),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """Redis working copy 삭제 (편집 취소, 변경사항 폐기)"""
+    """Redis working copy 삭제 (편집 취소, 변경사항 폐기) + 파일 Lock 해제"""
     await csrf_protect.validate_csrf(request)
+    user_id = current_user["user_id"]
 
     if not await gcs_edit_service.is_loaded(file_id):
         raise HTTPException(status_code=404, detail="GCS 편집 세션을 찾을 수 없습니다.")
@@ -319,11 +323,13 @@ async def discard_working_copy(
     gcs_path = meta["gcs_path"] if meta else ""
 
     await gcs_edit_service.discard(file_id)
+    await lock_service.release_lock(file_id, user_id)
+    await draft_service.delete_all_drafts_for_file(file_id, user_id)
 
     await audit_service.log(
         action="edit_cancel",
         request=request,
-        user_id=current_user["user_id"],
+        user_id=user_id,
         display_name=current_user.get("display_name", ""),
         file_id=file_id,
         metadata={"action": "discard_working_copy"},
@@ -333,11 +339,16 @@ async def discard_working_copy(
         try:
             await metadata_service.on_session_discard(
                 gcs_path=gcs_path,
-                user_id=current_user["user_id"],
+                user_id=user_id,
                 display_name=current_user.get("display_name", ""),
             )
         except Exception as e:
             logger.warning("DuckDB session_discard record failed (non-blocking): %s", e)
+
+    await ws_manager.broadcast(
+        file_id,
+        {"type": "lock_change", "action": "released", "user_id": user_id},
+    )
 
     return {"success": True, "message": "편집 세션이 취소되었습니다."}
 

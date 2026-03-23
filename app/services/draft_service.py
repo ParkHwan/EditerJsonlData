@@ -164,3 +164,18 @@ class DraftService:
         """Draft 존재 여부 확인"""
         key = self._get_key(file_id, row_idx, user_id)
         return bool(await self.redis.exists(key))
+
+    async def delete_all_drafts_for_file(
+        self,
+        file_id: str,
+        user_id: str,
+    ) -> int:
+        """특정 파일+사용자의 모든 Draft 삭제 (파일 Lock 해제 시 호출)"""
+        pattern = f"{self.DRAFT_PREFIX}{file_id}:*:{user_id}"
+        deleted_count = 0
+        async for key in self.redis.scan_iter(match=pattern, count=100):
+            await self.redis.delete(key)
+            deleted_count += 1
+        if deleted_count:
+            logger.debug(f"Deleted {deleted_count} drafts for file={file_id}, user={user_id}")
+        return deleted_count

@@ -102,18 +102,21 @@
 }
 .sid-id {
     font-size: 13px;
-    color: #333;
+    color: #424242;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1;
 }
 
-/* ── 우측 상세 패널 ── */
+/* ── 우측 상세 뷰 ── */
 .detail-panel {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 20px;
-    background: #f5f5f5;
+    background: #FAFAFA;
 }
 .detail-placeholder {
     display: flex;
@@ -121,28 +124,133 @@
     justify-content: center;
     height: 100%;
     color: #9E9E9E;
-    font-size: 16px;
+    font-size: 15px;
 }
 .detail-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 16px;
-    flex-wrap: wrap;
-    gap: 8px;
+    padding: 10px 16px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 .detail-toolbar-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
 }
 .detail-toolbar-right {
     display: flex;
     align-items: center;
     gap: 8px;
 }
+.gcs-mode-badge {
+    background: #E8F5E9;
+    color: #2E7D32;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
 
-/* ── 인라인 편집 모드 ── */
+/* ── 파일 Lock 상태 표시 ── */
+.file-lock-banner {
+    padding: 10px 16px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.file-lock-banner.locked-by-me {
+    background: #E8F5E9;
+    border: 1px solid #A5D6A7;
+    color: #2E7D32;
+}
+.file-lock-banner.locked-by-other {
+    background: #FFF3E0;
+    border: 1px solid #FFB74D;
+    color: #E65100;
+}
+.file-lock-banner.unlocked {
+    background: #E3F2FD;
+    border: 1px solid #90CAF9;
+    color: #1565C0;
+}
+.btn-file-lock {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+.btn-file-lock.start {
+    background: #1976D2;
+    color: white;
+}
+.btn-file-lock.start:hover {
+    background: #1565C0;
+}
+.btn-file-lock.end {
+    background: #F44336;
+    color: white;
+}
+.btn-file-lock.end:hover {
+    background: #D32F2F;
+}
+.btn-file-lock:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── 버튼 스타일 ── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+.btn-download { background: #E3F2FD; color: #1565C0; }
+.btn-download:hover { background: #BBDEFB; }
+.btn-gcs-publish {
+    background: #FF6D00;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.btn-gcs-publish:hover { background: #E65100; }
+.btn-gcs-publish:disabled { background: #CCC; cursor: not-allowed; }
+.btn-gcs-discard {
+    background: #9E9E9E;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.btn-gcs-discard:hover { background: #757575; }
+
+/* ── 인라인 편집 ── */
 .item.inline-editing {
     border: 3px solid #4CAF50 !important;
     box-shadow: 0 4px 16px rgba(76, 175, 80, 0.25);
@@ -169,7 +277,6 @@
 td.editable-value[contenteditable="true"] {
     display: table-cell;
 }
-/* 인라인 편집용 textarea (복잡한 값용) */
 .inline-edit-ta {
     width: 100%;
     min-height: 60px;
@@ -187,7 +294,6 @@ td.editable-value[contenteditable="true"] {
     border-color: #4CAF50;
     box-shadow: 0 0 0 2px rgba(76,175,80,0.2);
 }
-/* JSON 유효성 인디케이터 */
 .inline-edit-ta.json-valid {
     border-color: #4CAF50 !important;
     border-style: solid !important;
@@ -199,143 +305,36 @@ td.editable-value[contenteditable="true"] {
 }
 .json-validation-msg {
     font-size: 11px;
-    margin-top: 3px;
-    font-weight: 600;
+    margin-top: 2px;
+    min-height: 16px;
 }
 .json-validation-msg.valid { color: #4CAF50; }
 .json-validation-msg.invalid { color: #F44336; }
 .json-validation-msg.warning { color: #FF9800; }
-/* 저장 확인 오버레이 */
-.save-confirm-overlay {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-}
-.save-confirm-box {
-    background: white;
-    border-radius: 8px;
-    padding: 24px;
-    max-width: 720px;
-    width: 95%;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-}
-.save-confirm-box h3 {
-    margin: 0 0 16px 0;
-    font-size: 16px;
-    color: #1565C0;
-}
-.save-confirm-box .change-item {
-    padding: 8px 12px;
-    margin-bottom: 6px;
-    border-radius: 4px;
-    font-size: 13px;
-}
-.save-confirm-box .change-item.modified {
-    background: #E8F5E9;
-    border-left: 3px solid #4CAF50;
-}
-.save-confirm-box .change-item.warning {
-    background: #FFF3E0;
-    border-left: 3px solid #FF9800;
-}
-.save-confirm-box .change-item.error {
-    background: #FFEBEE;
-    border-left: 3px solid #F44336;
-}
-.save-confirm-box .change-field {
-    font-weight: 700;
-    color: #333;
-}
-.save-confirm-box .change-detail {
-    color: #666;
-    font-size: 12px;
-    margin-top: 4px;
-}
-.save-confirm-box .change-diff-split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 6px;
-}
-.save-confirm-box .change-diff-col {
-    padding: 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: monospace;
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 150px;
-    overflow-y: auto;
-    line-height: 1.5;
-}
-.save-confirm-box .change-diff-col.old-val {
-    background: #FFEBEE;
-    border: 1px solid #EF9A9A;
-}
-.save-confirm-box .change-diff-col.new-val {
-    background: #E8F5E9;
-    border: 1px solid #A5D6A7;
-}
-.save-confirm-box .change-diff-label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
-    display: block;
-}
-.save-confirm-box .change-diff-label.old { color: #C62828; }
-.save-confirm-box .change-diff-label.new { color: #2E7D32; }
-.save-confirm-box .hl-removed {
-    background: #FFCDD2;
-    text-decoration: line-through;
-    padding: 0 2px;
-    border-radius: 2px;
-}
-.save-confirm-box .hl-added {
-    background: #C8E6C9;
-    font-weight: 600;
-    padding: 0 2px;
-    border-radius: 2px;
-}
-.save-confirm-actions {
-    margin-top: 16px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-}
-/* 인라인 버튼 */
+
 .btn-inline-save {
+    padding: 5px 16px;
     background: #4CAF50;
     color: white;
     border: none;
-    padding: 4px 14px;
     border-radius: 4px;
-    font-weight: 600;
     cursor: pointer;
+    font-weight: 600;
     font-size: 13px;
-    transition: background 0.15s;
 }
 .btn-inline-save:hover { background: #388E3C; }
 .btn-inline-cancel {
+    padding: 5px 16px;
     background: #9E9E9E;
     color: white;
     border: none;
-    padding: 4px 14px;
     border-radius: 4px;
-    font-weight: 600;
     cursor: pointer;
+    font-weight: 500;
     font-size: 13px;
-    transition: background 0.15s;
 }
 .btn-inline-cancel:hover { background: #757575; }
-/* 인라인 상태 표시 */
+
 .inline-edit-status {
     font-size: 12px;
     color: #FFD54F;
@@ -348,7 +347,20 @@ td.editable-value[contenteditable="true"] {
 }
 .autosave-indicator.saving { color: #FF9800; }
 .autosave-indicator.saved { color: #81C784; }
-/* Draft 배너 (인라인) */
+
+.inline-meta-section {
+    margin-top: 12px;
+    border: 1px dashed #FF9800;
+    border-radius: 6px;
+    padding: 12px;
+    background: #FFF8E1;
+}
+.inline-meta-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #E65100;
+}
+
 .draft-banner-inline {
     background: #FFF3E0;
     border-bottom: 2px solid #FF9800;
@@ -363,20 +375,83 @@ td.editable-value[contenteditable="true"] {
 .draft-banner-inline button {
     margin-left: 6px;
 }
-/* content_meta 동적 편집 섹션 */
-.inline-meta-section {
-    margin-top: 12px;
-    border: 1px dashed #FF9800;
-    border-radius: 6px;
-    padding: 12px;
-    background: #FFF8E1;
+
+/* ── 저장 확인 오버레이 ── */
+.save-confirm-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
 }
-.inline-meta-section h4 {
-    margin: 0 0 8px 0;
-    font-size: 13px;
-    color: #E65100;
+.save-confirm-box {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
 }
-/* 로딩 인디케이터 */
+.save-confirm-box h3 {
+    margin: 0 0 16px;
+    font-size: 18px;
+    color: #333;
+}
+.save-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #eee;
+}
+.change-item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+.change-item.error { background: #FFEBEE; }
+.change-item.warning { background: #FFF8E1; }
+.change-item.modified { background: #F5F5F5; }
+.change-field { font-weight: 600; font-size: 13px; color: #333; margin-bottom: 4px; }
+.change-detail { font-size: 12px; color: #666; }
+.change-diff-split { display: flex; gap: 8px; margin-top: 4px; }
+.change-diff-col { flex: 1; padding: 6px 8px; border-radius: 4px; font-size: 12px; line-height: 1.5; word-break: break-all; max-height: 200px; overflow-y: auto; }
+.change-diff-col.old-val { background: #FFEBEE; }
+.change-diff-col.new-val { background: #E8F5E9; }
+.change-diff-label { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+.change-diff-label.old { background: #F44336; color: white; }
+.change-diff-label.new { background: #4CAF50; color: white; }
+.hl-removed { background: #FFCDD2; text-decoration: line-through; }
+.hl-added { background: #C8E6C9; font-weight: 600; }
+
+/* ── 토스트 ── */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 9999;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    max-width: 400px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: #4CAF50; }
+.toast.error { background: #F44336; }
+.toast.warning { background: #FF9800; }
+.toast.info { background: #2196F3; }
+
 .loading-spinner {
     display: flex;
     align-items: center;
@@ -385,53 +460,64 @@ td.editable-value[contenteditable="true"] {
     color: #9E9E9E;
     font-size: 14px;
 }
-
-/* Lock 상태 배지 (Phase 4) */
-.lock-badge {
-    font-size: 11px;
+.error-msg {
+    text-align: center;
+    padding: 40px;
     color: #F44336;
-    margin-left: auto;
-    flex-shrink: 0;
 }
-.lock-badge.mine {
-    color: #4CAF50;
+
+/* ── 카드 컨텐츠 오버플로우 제어 ── */
+#cardContainer {
+    overflow-x: hidden;
+    word-break: break-word;
 }
-/* GCS 모드 UI */
-.gcs-mode-badge {
-    display: inline-block;
+
+/* ── 편집 비활성화 상태 ── */
+.btn-edit[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── 키 추가/삭제 버튼 ── */
+.btn-add-key {
+    margin-top: 6px;
+    padding: 4px 12px;
     background: #E3F2FD;
     color: #1565C0;
-    padding: 3px 10px;
-    border-radius: 12px;
+    border: 1px dashed #90CAF9;
+    border-radius: 4px;
+    cursor: pointer;
     font-size: 12px;
     font-weight: 600;
-    margin-left: 8px;
+    transition: all 0.2s;
 }
-.btn-gcs-publish {
-    background: #FF6D00;
-    color: white;
+.btn-add-key:hover {
+    background: #BBDEFB;
+    border-color: #1976D2;
+}
+.btn-delete-key {
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: #FFCDD2;
+    color: #C62828;
     border: none;
-    padding: 6px 16px;
-    border-radius: 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
     font-weight: 700;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background 0.15s;
+    line-height: 1;
+    transition: all 0.2s;
+    vertical-align: middle;
 }
-.btn-gcs-publish:hover { background: #E65100; }
-.btn-gcs-publish:disabled { background: #CCC; cursor: not-allowed; }
-.btn-gcs-discard {
-    background: #9E9E9E;
-    color: white;
-    border: none;
-    padding: 6px 16px;
-    border-radius: 4px;
-    font-weight: 600;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background 0.15s;
+.btn-delete-key:hover {
+    background: #EF9A9A;
 }
-.btn-gcs-discard:hover { background: #757575; }
+.new-key-row td {
+    background: #E8F5E9 !important;
+}
+.section-block {
+    margin-bottom: 8px;
+}
 </style>
 {% endblock %}
 
@@ -458,6 +544,12 @@ td.editable-value[contenteditable="true"] {
 
     <!-- 우측: 상세 뷰 -->
     <div class="detail-panel" id="detailPanel">
+        <!-- 파일 Lock 상태 배너 -->
+        <div class="file-lock-banner unlocked" id="fileLockBanner">
+            <span id="fileLockText">파일을 편집하려면 '편집 시작' 버튼을 누르세요.</span>
+            <button class="btn-file-lock start" id="btnFileLock" onclick="toggleFileLock()">🔓 편집 시작</button>
+        </div>
+
         <div class="detail-placeholder" id="detailPlaceholder">
             좌측 목록에서 항목을 선택해주세요
         </div>
@@ -506,33 +598,108 @@ let rawEditData = null;
 let originalHtmlMap = {};
 let originalTypeMap = {};
 
-// ── Lock 상태 실시간 표시 (Phase 4) ──
-const lockStateByRow = {};
-function updateSidebarLockBadge(rowIdx, userId, displayName) {
-    const el = document.querySelector(`.sidebar-item[data-row-idx="${rowIdx}"]`);
-    if (!el) return;
-    let badge = el.querySelector('.lock-badge');
-    if (userId) {
-        lockStateByRow[rowIdx] = { user_id: userId, display_name: displayName || userId };
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'lock-badge';
-            el.appendChild(badge);
-        }
-        const isMine = userId === CURRENT_USER_ID;
-        if (isMine) badge.classList.add('mine'); else badge.classList.remove('mine');
-        badge.textContent = isMine ? '\uD83D\uDD12 (나)' : '\uD83D\uDD12 ' + (displayName || userId);
+let fileLockOwner = null;
+let isFileLockedByMe = false;
+
+const deletedKeys = new Set();
+const addedKeys = new Map();
+
+// ── 파일 Lock 상태 UI 업데이트 ──
+function updateFileLockUI() {
+    const banner = document.getElementById('fileLockBanner');
+    const text = document.getElementById('fileLockText');
+    const btn = document.getElementById('btnFileLock');
+
+    banner.classList.remove('locked-by-me', 'locked-by-other', 'unlocked');
+
+    if (isFileLockedByMe) {
+        banner.classList.add('locked-by-me');
+        text.textContent = '🔒 편집 모드 — 편집이 완료되면 편집 종료를 눌러주세요.';
+        btn.textContent = '🔓 편집 종료';
+        btn.className = 'btn-file-lock end';
+        btn.disabled = false;
+    } else if (fileLockOwner) {
+        banner.classList.add('locked-by-other');
+        text.textContent = `🔒 ${fileLockOwner}님이 편집 중입니다. 열람만 가능합니다.`;
+        btn.textContent = '편집 불가';
+        btn.className = 'btn-file-lock start';
+        btn.disabled = true;
     } else {
-        delete lockStateByRow[rowIdx];
-        if (badge) badge.remove();
+        banner.classList.add('unlocked');
+        text.textContent = '파일을 편집하려면 \'편집 시작\' 버튼을 누르세요.';
+        btn.textContent = '🔓 편집 시작';
+        btn.className = 'btn-file-lock start';
+        btn.disabled = false;
     }
-}
-function applyLockStateToSidebar() {
-    Object.keys(lockStateByRow).forEach(idx => {
-        const r = lockStateByRow[Number(idx)];
-        if (r) updateSidebarLockBadge(Number(idx), r.user_id, r.display_name);
+
+    document.querySelectorAll('.btn-edit').forEach(b => {
+        b.disabled = !isFileLockedByMe;
     });
 }
+
+async function toggleFileLock() {
+    if (isFileLockedByMe) {
+        await releaseFileLock();
+    } else {
+        await acquireFileLock();
+    }
+}
+
+async function acquireFileLock() {
+    try {
+        const resp = await csrfFetch(`${API_V1_STR}/editor/lock/${FILE_ID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (resp.status === 401) {
+            window.location.href = `${API_V1_STR}/view/login`;
+            return;
+        }
+        if (!resp.ok) {
+            const err = await resp.json();
+            showToast(err.detail || '편집 잠금 실패', 'error');
+            return;
+        }
+
+        isFileLockedByMe = true;
+        fileLockOwner = CURRENT_USER_ID;
+        updateFileLockUI();
+        showToast('편집 모드 시작 — 이제 항목을 자유롭게 편집할 수 있습니다.', 'success');
+
+        heartbeatInterval = setInterval(sendHeartbeat, 30000);
+    } catch (e) {
+        showToast('편집 시작 실패: ' + e.message, 'error');
+    }
+}
+
+async function releaseFileLock() {
+    if (currentRowIdx !== null) {
+        if (!confirm('편집 중인 항목이 있습니다. 편집을 종료하시겠습니까?\n저장하지 않은 변경사항은 사라집니다.')) {
+            return;
+        }
+        await cancelEdit();
+    }
+
+    try {
+        await csrfFetch(`${API_V1_STR}/editor/lock/${FILE_ID}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+    } catch (e) { /* silent */ }
+
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+
+    isFileLockedByMe = false;
+    fileLockOwner = null;
+    updateFileLockUI();
+    showToast('편집 종료', 'info');
+}
+
+// ── WebSocket Lock 상태 실시간 ──
 class LockStatusManager {
     constructor(fileId, currentUserId) {
         this.fileId = fileId;
@@ -552,17 +719,36 @@ class LockStatusManager {
         this.ws.onmessage = (ev) => {
             try {
                 const data = JSON.parse(ev.data);
-                if (data.type === 'init' && Array.isArray(data.locks)) {
-                    data.locks.forEach(l => {
-                        lockStateByRow[l.row_idx] = { user_id: l.user_id, display_name: l.user_id };
-                        updateSidebarLockBadge(l.row_idx, l.user_id, l.user_id);
-                    });
+                if (data.type === 'init') {
+                    if (data.lock && data.lock.user_id) {
+                        fileLockOwner = data.lock.user_id;
+                        isFileLockedByMe = (data.lock.user_id === this.currentUserId);
+                        if (isFileLockedByMe && !heartbeatInterval) {
+                            heartbeatInterval = setInterval(sendHeartbeat, 30000);
+                        }
+                    } else {
+                        fileLockOwner = null;
+                        isFileLockedByMe = false;
+                    }
+                    updateFileLockUI();
                 } else if (data.type === 'lock_change') {
                     if (data.action === 'acquired') {
-                        updateSidebarLockBadge(data.row_idx, data.user_id, data.display_name || data.user_id);
+                        fileLockOwner = data.display_name || data.user_id;
+                        isFileLockedByMe = (data.user_id === this.currentUserId);
+                        if (isFileLockedByMe && !heartbeatInterval) {
+                            heartbeatInterval = setInterval(sendHeartbeat, 30000);
+                        }
                     } else if (data.action === 'released') {
-                        updateSidebarLockBadge(data.row_idx, null);
+                        if (!isFileLockedByMe || data.user_id === this.currentUserId) {
+                            fileLockOwner = null;
+                            isFileLockedByMe = false;
+                            if (heartbeatInterval) {
+                                clearInterval(heartbeatInterval);
+                                heartbeatInterval = null;
+                            }
+                        }
                     }
+                    updateFileLockUI();
                 }
             } catch (e) { /* ignore */ }
         };
@@ -615,7 +801,6 @@ function filterSidebar(query) {
 
 // ── 사이드바 항목 선택 ──
 async function selectItem(el, rowIdx, dataId) {
-    // 편집 중이면 경고
     if (currentRowIdx !== null) {
         if (!confirm('편집 중인 내용이 있습니다. 다른 항목을 선택하시겠습니까?\n저장하지 않은 변경사항은 사라집니다.')) {
             return;
@@ -636,7 +821,7 @@ async function selectItem(el, rowIdx, dataId) {
     container.innerHTML = '<div class="loading-spinner">로딩 중...</div>';
 
     try {
-        let cardUrl = `/api/v1/editor/card/${FILE_ID}/${rowIdx}`;
+        let cardUrl = `${API_V1_STR}/editor/card/${FILE_ID}/${rowIdx}`;
         if (GCS_DATE) cardUrl += `?gcs_date=${encodeURIComponent(GCS_DATE)}`;
 
         const resp = await fetch(cardUrl, {
@@ -648,57 +833,51 @@ async function selectItem(el, rowIdx, dataId) {
         if (window.renderMathInElement && window.__katexOptions) {
             renderMathInElement(container, window.__katexOptions);
         }
+
+        document.querySelectorAll('.btn-edit').forEach(b => {
+            b.disabled = !isFileLockedByMe;
+        });
     } catch (e) {
         container.innerHTML = `<div class="error-msg">카드 로드 실패: ${e.message}</div>`;
     }
 }
 
 // ══════════════════════════════════════════════
-//  인라인 편집 — Lock 획득 → 편집 모드 진입
+//  인라인 편집 — 파일 Lock 필수, 행별 편집 진입
 // ══════════════════════════════════════════════
-async function acquireLock(dataId, rowIdx) {
+async function startRowEdit(dataId, rowIdx) {
+    if (!isFileLockedByMe) {
+        showToast('먼저 \'편집 시작\' 버튼을 눌러 파일 잠금을 획득하세요.', 'warning');
+        return;
+    }
+
+    if (currentRowIdx !== null) {
+        if (!confirm('편집 중인 항목이 있습니다. 다른 항목을 편집하시겠습니까?\n저장하지 않은 변경사항은 사라집니다.')) {
+            return;
+        }
+        await cancelEdit();
+    }
+
     try {
-        const resp = await csrfFetch(`/api/v1/editor/lock/${FILE_ID}/${rowIdx}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (resp.status === 401) {
-            window.location.href = '/api/v1/view/login';
-            return;
-        }
-        if (!resp.ok) {
-            const err = await resp.json();
-            showToast(err.detail || '편집 잠금 실패', 'error');
-            return;
-        }
-
         currentRowIdx = rowIdx;
         currentDataId = dataId;
-        showToast('편집 모드 진입', 'success');
 
-        // Raw 데이터 로드
-        const dataResp = await fetch(`/api/v1/editor/data/${FILE_ID}/${rowIdx}`);
+        const dataResp = await fetch(`${API_V1_STR}/editor/data/${FILE_ID}/${rowIdx}`);
         if (!dataResp.ok) throw new Error('데이터 로드 실패');
         rawEditData = await dataResp.json();
         currentVersion = rawEditData.version || 1;
 
-        // 카드를 인라인 편집 모드로 전환
         const card = document.querySelector(`.item[data-row-idx="${rowIdx}"]`);
         if (!card) throw new Error('카드를 찾을 수 없습니다');
 
         enterInlineEdit(card);
 
-        // Draft 확인
         await checkDraft(rowIdx, card);
 
-        // Heartbeat (30초 간격)
-        heartbeatInterval = setInterval(() => sendHeartbeat(rowIdx), 30000);
-
-        // Auto-save 시작
         startAutoSave();
-
+        showToast('편집 모드 진입', 'success');
     } catch (e) {
+        currentRowIdx = null;
         showToast('편집 모드 진입 실패: ' + e.message, 'error');
     }
 }
@@ -709,7 +888,6 @@ function enterInlineEdit(card) {
     originalHtmlMap = {};
     originalTypeMap = {};
 
-    // 카드 내 모든 editable-value에 대해 편집 가능 설정
     const editables = card.querySelectorAll('.editable-value[data-field]');
     editables.forEach(el => {
         const field = el.dataset.field;
@@ -740,7 +918,6 @@ function enterInlineEdit(card) {
         el.dataset.editing = 'true';
     });
 
-    // content_meta 편집 섹션 동적 추가
     if (rawEditData.content_meta && typeof rawEditData.content_meta === 'object') {
         const metaSection = document.createElement('div');
         metaSection.className = 'inline-meta-section';
@@ -775,7 +952,9 @@ function enterInlineEdit(card) {
         metaSection.querySelectorAll('.inline-edit-ta').forEach(ta => attachJsonValidator(ta));
     }
 
-    // 편집 버튼 → 저장/취소 버튼으로 교체
+    card.querySelectorAll('.btn-add-key').forEach(b => b.style.display = '');
+    card.querySelectorAll('.btn-delete-key').forEach(b => b.style.display = '');
+
     const actions = card.querySelector('.header-actions');
     actions.dataset.originalHtml = actions.innerHTML;
     actions.innerHTML = `
@@ -784,7 +963,6 @@ function enterInlineEdit(card) {
         <button class="btn-inline-save" onclick="saveEdit()">저장</button>
     `;
 
-    // 편집 상태 표시
     const status = card.querySelector('.inline-edit-status');
     if (status) status.textContent = '편집 중';
 }
@@ -936,6 +1114,24 @@ function validateAllChanges() {
         }
     });
 
+    for (const fieldPath of deletedKeys) {
+        const key = fieldPath.split('.').pop();
+        const origValue = getNestedValue(rawEditData, fieldPath);
+        const origStr = origValue == null ? '' : (typeof origValue === 'string' ? origValue : JSON.stringify(origValue));
+        changes.push({ field: fieldPath, from: origStr, to: '(삭제됨)' });
+    }
+
+    for (const [fieldPath] of addedKeys) {
+        if (!deletedKeys.has(fieldPath)) {
+            const card2 = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+            const el = card2?.querySelector(`[data-field="${fieldPath}"][data-editing="true"]`);
+            const newVal = el ? el.textContent.trim() : '';
+            if (newVal) {
+                changes.push({ field: fieldPath, from: '(신규)', to: newVal });
+            }
+        }
+    }
+
     return { valid: errors.length === 0, errors, warnings, changes };
 }
 
@@ -1048,6 +1244,84 @@ function showSaveConfirm(validation) {
 }
 
 // ══════════════════════════════════════════════
+//  키 추가 / 삭제
+// ══════════════════════════════════════════════
+function addKeyToSection(sectionPath) {
+    if (currentRowIdx === null || !rawEditData) return;
+
+    const newKey = prompt('추가할 키 이름을 입력하세요:');
+    if (!newKey || !newKey.trim()) return;
+    const key = newKey.trim();
+
+    const sectionData = getNestedValue(rawEditData, sectionPath);
+    if (sectionData && typeof sectionData === 'object' && key in sectionData && !deletedKeys.has(`${sectionPath}.${key}`)) {
+        alert(`'${key}' 키가 이미 존재합니다. 다른 이름을 사용하세요.`);
+        return;
+    }
+
+    if (addedKeys.has(`${sectionPath}.${key}`)) {
+        alert(`'${key}' 키가 이미 추가되었습니다.`);
+        return;
+    }
+
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return;
+    const sectionBlock = card.querySelector(`[data-section="${sectionPath}"]`);
+    if (!sectionBlock) return;
+    const table = sectionBlock.querySelector('.info-table');
+    if (!table) return;
+
+    const fieldPath = `${sectionPath}.${key}`;
+    const tr = document.createElement('tr');
+    tr.dataset.key = key;
+    tr.className = 'new-key-row';
+    tr.innerHTML = `
+        <th style="background-color:#757575;color:white;">
+            ${escapeHtml(key)}
+            <button class="btn-delete-key" onclick="deleteKeyFromSection('${sectionPath}', '${escapeHtml(key)}')" title="키 삭제">×</button>
+        </th>
+        <td class="editable-value" data-field="${escapeHtml(fieldPath)}" data-editing="true" contenteditable="true" style="background-color:#E8F5E9;"></td>
+    `;
+
+    table.appendChild(tr);
+    addedKeys.set(fieldPath, '');
+    originalTypeMap[fieldPath] = 'string';
+
+    const td = tr.querySelector('td');
+    if (td) td.focus();
+
+    showToast(`'${key}' 키가 추가되었습니다.`, 'success');
+}
+
+function deleteKeyFromSection(sectionPath, key) {
+    if (currentRowIdx === null) return;
+
+    if (!confirm(`'${key}' 키를 삭제하시겠습니까?\n이 작업은 저장 시 반영됩니다.`)) {
+        return;
+    }
+
+    const fieldPath = `${sectionPath}.${key}`;
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return;
+
+    const sectionBlock = card.querySelector(`[data-section="${sectionPath}"]`);
+    if (!sectionBlock) return;
+
+    const row = sectionBlock.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
+    if (row) {
+        row.remove();
+    }
+
+    if (addedKeys.has(fieldPath)) {
+        addedKeys.delete(fieldPath);
+    } else {
+        deletedKeys.add(fieldPath);
+    }
+
+    showToast(`'${key}' 키가 삭제 예정입니다. 저장 시 반영됩니다.`, 'info');
+}
+
+// ══════════════════════════════════════════════
 //  인라인 편집 값 수집
 // ══════════════════════════════════════════════
 function collectInlineChanges() {
@@ -1095,6 +1369,10 @@ function collectInlineChanges() {
         setNestedValue(changes, field, value);
     });
 
+    if (deletedKeys.size > 0 || addedKeys.size > 0) {
+        modifiedTopKeys.add('add_info');
+    }
+
     for (const topKey of modifiedTopKeys) {
         if (rawEditData[topKey] && typeof rawEditData[topKey] === 'object' && !Array.isArray(rawEditData[topKey])) {
             const merged = JSON.parse(JSON.stringify(rawEditData[topKey]));
@@ -1105,24 +1383,40 @@ function collectInlineChanges() {
         }
     }
 
+    for (const fieldPath of deletedKeys) {
+        const parts = fieldPath.split('.');
+        if (parts.length >= 3) {
+            const topKey = parts[0];
+            let obj = changes[topKey];
+            if (!obj) continue;
+            for (let i = 1; i < parts.length - 1; i++) {
+                if (!obj[parts[i]]) break;
+                obj = obj[parts[i]];
+            }
+            const lastKey = parts[parts.length - 1];
+            if (obj && lastKey in obj) {
+                delete obj[lastKey];
+            }
+        }
+    }
+
     return changes;
 }
 
 // ══════════════════════════════════════════════
-//  저장
+//  저장 (파일 Lock 유지)
 // ══════════════════════════════════════════════
 async function saveEdit() {
     if (currentRowIdx === null) return;
 
     const validation = validateAllChanges();
-
     const confirmed = await showSaveConfirm(validation);
     if (!confirmed) return;
 
     const changes = collectInlineChanges();
 
     try {
-        const resp = await csrfFetch(`/api/v1/editor/data/${FILE_ID}/${currentRowIdx}`, {
+        const resp = await csrfFetch(`${API_V1_STR}/editor/data/${FILE_ID}/${currentRowIdx}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1145,7 +1439,7 @@ async function saveEdit() {
         }
         const savedRowIdx = currentRowIdx;
         const savedDataId = currentDataId;
-        await exitInlineEdit(true);
+        await exitInlineEdit();
 
         const activeItem = document.querySelector('.sidebar-item.active');
         if (activeItem) {
@@ -1158,14 +1452,13 @@ async function saveEdit() {
 }
 
 // ══════════════════════════════════════════════
-//  취소
+//  취소 (행 편집 취소, 파일 Lock 유지)
 // ══════════════════════════════════════════════
 async function cancelEdit() {
     if (currentRowIdx === null) return;
 
     const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
     if (card) {
-        // 원본 HTML 복원
         const editables = card.querySelectorAll('.editable-value[data-editing="true"]');
         editables.forEach(el => {
             const field = el.dataset.field;
@@ -1177,48 +1470,37 @@ async function cancelEdit() {
             el.removeAttribute('data-use-textarea');
         });
 
-        // 동적 추가된 content_meta 섹션 제거
         const metaSection = document.getElementById('inlineContentMeta');
         if (metaSection) metaSection.remove();
 
-        // Draft 배너 제거
         const banner = document.getElementById('draftBanner');
         if (banner) banner.remove();
 
-        // 버튼 복원
         const actions = card.querySelector('.header-actions');
         if (actions && actions.dataset.originalHtml) {
             actions.innerHTML = actions.dataset.originalHtml;
         }
 
+        card.querySelectorAll('.btn-add-key').forEach(b => b.style.display = 'none');
+        card.querySelectorAll('.btn-delete-key').forEach(b => b.style.display = 'none');
+
         card.classList.remove('inline-editing');
         const status = card.querySelector('.inline-edit-status');
         if (status) status.textContent = '';
 
-        // KaTeX 재렌더링
         if (window.renderMathInElement && window.__katexOptions) {
             renderMathInElement(card, window.__katexOptions);
         }
+
+        document.querySelectorAll('.btn-edit').forEach(b => {
+            b.disabled = !isFileLockedByMe;
+        });
     }
 
-    await exitInlineEdit(true);
+    await exitInlineEdit();
 }
 
-// ── 편집 종료 공통 ──
-async function exitInlineEdit(releaseLock) {
-    if (releaseLock && currentRowIdx !== null) {
-        try {
-            await csrfFetch(`/api/v1/editor/lock/${FILE_ID}/${currentRowIdx}`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' }
-            });
-        } catch (e) { /* silent */ }
-    }
-
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-    }
+async function exitInlineEdit() {
     if (autoSaveInterval) {
         clearInterval(autoSaveInterval);
         autoSaveInterval = null;
@@ -1230,6 +1512,8 @@ async function exitInlineEdit(releaseLock) {
     originalHtmlMap = {};
     originalTypeMap = {};
     pendingDraftData = null;
+    deletedKeys.clear();
+    addedKeys.clear();
 }
 
 // ══════════════════════════════════════════════
@@ -1237,7 +1521,7 @@ async function exitInlineEdit(releaseLock) {
 // ══════════════════════════════════════════════
 async function checkDraft(rowIdx, card) {
     try {
-        const resp = await fetch(`/api/v1/editor/draft/${FILE_ID}/${rowIdx}`, {
+        const resp = await fetch(`${API_V1_STR}/editor/draft/${FILE_ID}/${rowIdx}`, {
             credentials: 'same-origin'
         });
         if (!resp.ok) return;
@@ -1257,7 +1541,6 @@ async function checkDraft(rowIdx, card) {
                     <button class="btn-inline-cancel" onclick="discardDraft()" style="font-size:12px;padding:3px 10px;">무시</button>
                 </div>
             `;
-            // 카드 header 다음에 삽입
             const header = card.querySelector('.header');
             if (header && header.nextSibling) {
                 card.insertBefore(banner, header.nextSibling);
@@ -1290,7 +1573,6 @@ function applyChangesToCard(card, obj, prefix) {
         const field = prefix ? `${prefix}.${key}` : key;
 
         if (value && typeof value === 'object' && !Array.isArray(value)) {
-            // 중첩 객체면 재귀
             applyChangesToCard(card, value, field);
         } else {
             const el = card.querySelector(`[data-field="${field}"][data-editing="true"]`);
@@ -1310,7 +1592,7 @@ async function discardDraft() {
     if (currentRowIdx === null) return;
 
     try {
-        await csrfFetch(`/api/v1/editor/draft/${FILE_ID}/${currentRowIdx}`, {
+        await csrfFetch(`${API_V1_STR}/editor/draft/${FILE_ID}/${currentRowIdx}`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' }
         });
@@ -1341,7 +1623,7 @@ async function autoSaveDraft() {
 
     try {
         const changes = collectInlineChanges();
-        const resp = await csrfFetch(`/api/v1/editor/draft/${FILE_ID}/${currentRowIdx}`, {
+        const resp = await csrfFetch(`${API_V1_STR}/editor/draft/${FILE_ID}/${currentRowIdx}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1366,14 +1648,14 @@ async function autoSaveDraft() {
     }
 }
 
-async function sendHeartbeat(rowIdx) {
+async function sendHeartbeat() {
     try {
-        const resp = await fetch(`/api/v1/editor/lock/${FILE_ID}/${rowIdx}/heartbeat`, {
+        const resp = await fetch(`${API_V1_STR}/editor/lock/${FILE_ID}/heartbeat`, {
             method: 'POST',
             credentials: 'same-origin'
         });
         if (!resp.ok) {
-            showToast('Lock 연장 실패 - 저장 후 닫아주세요', 'warning');
+            showToast('Lock 연장 실패 - 편집을 종료해 주세요', 'warning');
         }
     } catch (e) { /* silent */ }
 }
@@ -1397,12 +1679,16 @@ async function publishToGCS() {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ 업데이트 중...'; }
 
     try {
-        const resp = await csrfFetch(`/api/v1/editor/publish/${FILE_ID}`, {
+        const resp = await csrfFetch(`${API_V1_STR}/editor/publish/${FILE_ID}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
         const data = await resp.json();
         if (resp.ok) {
+            isFileLockedByMe = false;
+            fileLockOwner = null;
+            updateFileLockUI();
+            if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
             showToast(data.message || 'GCS 파일 업데이트 완료!', 'success');
         } else {
             showToast(data.detail || 'GCS 파일 업데이트 실패', 'error');
@@ -1427,14 +1713,17 @@ async function discardWorkingCopy() {
     }
 
     try {
-        const resp = await csrfFetch(`/api/v1/editor/discard/${FILE_ID}`, {
+        const resp = await csrfFetch(`${API_V1_STR}/editor/discard/${FILE_ID}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
         const data = await resp.json();
         if (resp.ok) {
+            isFileLockedByMe = false;
+            fileLockOwner = null;
+            if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
             showToast(data.message || '편집 세션 취소됨', 'success');
-            setTimeout(() => { window.location.href = '/api/v1/gcs/browse'; }, 1000);
+            setTimeout(() => { window.location.href = `${API_V1_STR}/gcs/browse`; }, 1000);
         } else {
             showToast(data.detail || '취소 실패', 'error');
         }
@@ -1444,17 +1733,42 @@ async function discardWorkingCopy() {
 }
 
 // ══════════════════════════════════════════════
+//  토스트
+// ══════════════════════════════════════════════
+function showToast(msg, type) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.className = `toast ${type || 'info'}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+        el.classList.remove('show');
+        setTimeout(() => el.remove(), 300);
+    }, 3000);
+}
+
+// ══════════════════════════════════════════════
+//  CSRF Fetch 헬퍼
+// ══════════════════════════════════════════════
+async function csrfFetch(url, options = {}) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const headers = options.headers || {};
+    headers['X-CSRF-Token'] = csrfToken;
+    return fetch(url, { ...options, headers, credentials: 'same-origin' });
+}
+
+// ══════════════════════════════════════════════
 //  단축키 및 이벤트
 // ══════════════════════════════════════════════
-
-// ESC 키로 편집 취소
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && currentRowIdx !== null) {
         cancelEdit();
     }
 });
 
-// Ctrl+S로 저장
 document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -1464,11 +1778,16 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// 페이지 이탈 시 경고
 window.addEventListener('beforeunload', (e) => {
-    if (currentRowIdx !== null) {
+    if (currentRowIdx !== null || isFileLockedByMe) {
         e.preventDefault();
         e.returnValue = '';
+    }
+});
+
+window.addEventListener('unload', () => {
+    if (isFileLockedByMe) {
+        navigator.sendBeacon(`${API_V1_STR}/editor/lock/${FILE_ID}/release-beacon`);
     }
 });
 

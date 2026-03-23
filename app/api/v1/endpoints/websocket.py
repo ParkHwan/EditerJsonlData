@@ -1,4 +1,4 @@
-"""WebSocket 엔드포인트 — 실시간 Lock 상태 (Phase 4)"""
+"""WebSocket 엔드포인트 — 실시간 파일 Lock 상태 (Phase 4 → Phase 14: 파일 단위)"""
 
 from __future__ import annotations
 
@@ -23,8 +23,7 @@ async def lock_status_ws(
     auth_service: AuthService = Depends(get_auth_service),
     lock_service: LockService = Depends(get_lock_service),
 ) -> None:
-    """file_id에 대한 Lock 상태 실시간 구독. 세션 쿠키로 인증."""
-    # 경로 순회 방지 (file_id는 파일명만 허용)
+    """file_id에 대한 파일 Lock 상태 실시간 구독. 세션 쿠키로 인증."""
     if "/" in file_id or ".." in file_id or not file_id.strip():
         await websocket.close(code=4000)
         return
@@ -38,18 +37,15 @@ async def lock_status_ws(
     await ws_manager.connect(file_id, websocket)
 
     try:
-        # 초기 Lock 목록 전송
-        locks = await lock_service.get_all_locks(file_id)
-        await websocket.send_json({"type": "init", "locks": locks})
+        lock_info = await lock_service.get_lock_info(file_id)
+        await websocket.send_json({"type": "init", "lock": lock_info})
 
-        # Keepalive + 수신 루프
         while True:
             try:
                 msg: Any = await asyncio.wait_for(websocket.receive_json(), timeout=45.0)
                 if msg.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
             except asyncio.TimeoutError:
-                # timeout 시 keepalive 전송 — 연결 해제된 상태면 예외를 상위로 전파
                 try:
                     await websocket.send_json({"type": "pong"})
                 except Exception:

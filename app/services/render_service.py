@@ -470,7 +470,7 @@ def render_item_card(
         f'<span class="header-left">No. {idx} | ID: {escape_html(item.get("data_id", ""))}{type_badge}</span>'
         f'<span class="inline-edit-status"></span>'
         f'<span class="header-actions">'
-        f'<button class="btn-edit" onclick="acquireLock(\'{escape_html(item.get("data_id", ""))}\', {idx - 1})">편집</button>'
+        f'<button class="btn-edit" onclick="startRowEdit(\'{escape_html(item.get("data_id", ""))}\', {idx - 1})">편집</button>'
         f"</span>"
         f"</div>"
     )
@@ -524,6 +524,8 @@ def render_item_card(
     )
 
     # ── 상세 정보 테이블 (book_meta / unit_meta / 문제 / 풀이) ──
+    KEY_EDITABLE_SECTIONS = {"unit_meta", "문제", "풀이"}
+
     for section in ["book_meta", "unit_meta", "문제", "풀이"]:
         section_data = add_info.get(section)
         if section_data is None:
@@ -537,6 +539,10 @@ def render_item_card(
             )
             continue
 
+        is_key_editable = section in KEY_EDITABLE_SECTIONS
+        section_path = f"add_info.{section}"
+        section_attr = f' data-section="{section_path}"' if is_key_editable else ""
+        html += f'<div class="section-block"{section_attr}>'
         html += '<table class="info-table">'
 
         for k, v in section_data.items():
@@ -544,8 +550,16 @@ def render_item_card(
             key_color = colors["key"]
             value_color = colors["value"]
 
-            html += f'<tr><th style="background-color: {key_color};">{escape_html(k)}</th>'
-            html += f'<td style="background-color: {value_color};" class="editable-value" data-field="add_info.{section}.{k}">'
+            row_attr = f' data-key="{escape_html(k)}"' if is_key_editable else ""
+            html += f'<tr{row_attr}><th style="background-color: {key_color};">{escape_html(k)}'
+            if is_key_editable:
+                html += (
+                    f'<button class="btn-delete-key" style="display:none;" '
+                    f"onclick=\"deleteKeyFromSection('{section_path}', '{escape_html(k)}')\" "
+                    f'title="키 삭제">×</button>'
+                )
+            html += "</th>"
+            html += f'<td style="background-color: {value_color};" class="editable-value" data-field="{section_path}.{escape_html(k)}">'
 
             if k == "선택지" and isinstance(v, dict):
                 for ok, ov in v.items():
@@ -567,6 +581,13 @@ def render_item_card(
             html += "</td></tr>"
 
         html += "</table>"
+        if is_key_editable:
+            html += (
+                f'<button class="btn-add-key" style="display:none;" '
+                f"onclick=\"addKeyToSection('{section_path}')\">"
+                f"+ 키 추가</button>"
+            )
+        html += "</div>"
 
     html += "</div>"  # .item 닫기
     return html

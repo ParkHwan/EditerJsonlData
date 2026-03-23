@@ -27,6 +27,7 @@ ActionType = Literal[
     "logout",
     "view",
     "edit_start",
+    "edit_end",
     "edit_save",
     "edit_cancel",
     "download",
@@ -36,6 +37,9 @@ ActionType = Literal[
     "draft_delete",
     "gcs_download",
     "gcs_upload",
+    "gcs_file_download",
+    "gcs_jsonl_download",
+    "gcs_folder_download",
 ]
 
 
