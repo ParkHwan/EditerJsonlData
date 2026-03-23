@@ -42,9 +42,9 @@ async def login_page(
     """로그인 페이지 (이메일 + 비밀번호)"""
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     response = templates.TemplateResponse(
+        request,
         "login.html",
         {
-            "request": request,
             "csrf_token": csrf_token,
             "api_prefix": settings.API_V1_STR,
             "error": error,
@@ -77,9 +77,9 @@ async def admin_users_page(
 
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     response = templates.TemplateResponse(
+        request,
         "admin_users.html",
         {
-            "request": request,
             "users": users,
             "current_user": current_user,
             "csrf_token": csrf_token,
@@ -110,9 +110,9 @@ async def list_files(
 
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     response = templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "tasks": tasks,
             "current_user": current_user,
             "csrf_token": csrf_token,
@@ -178,9 +178,9 @@ async def view_file(
     )
 
     response = templates.TemplateResponse(
+        request,
         "editor.html",
         {
-            "request": request,
             "file_id": safe_id,
             "file_name": f"{safe_id}.jsonl",
             "total_items": total_items,
