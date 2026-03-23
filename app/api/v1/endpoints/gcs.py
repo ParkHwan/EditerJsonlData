@@ -27,12 +27,11 @@ from typing import Any
 import hmac
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi_csrf_protect import CsrfProtect
 from google.cloud.exceptions import GoogleCloudError, NotFound
 from pydantic import BaseModel
-from starlette.background import BackgroundTask
 
 from app.api.deps import get_current_user, get_optional_user
 from app.core.config import settings
@@ -183,9 +182,9 @@ async def gcs_browse(
 
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     response = templates.TemplateResponse(
+        request,
         "gcs_browse.html",
         {
-            "request": request,
             "folders": folders,
             "gcs_error": gcs_error,
             "current_user": current_user,
@@ -266,9 +265,9 @@ async def gcs_browse_date(
 
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     response = templates.TemplateResponse(
+        request,
         "gcs_files.html",
         {
-            "request": request,
             "files": files,
             "date_str": safe_date,
             "date_display": f"{safe_date[:4]}-{safe_date[4:6]}-{safe_date[6:8]}",
@@ -413,40 +412,17 @@ async def download_file(
 
 
 # ---------------------------------------------------------------------------
-# 브라우저 다운로드 — 폴더 ZIP 다운로드
+# 브라우저 다운로드 — JSONL 전체 ZIP (비동기 인메모리)
 # ---------------------------------------------------------------------------
-_DOWNLOAD_TYPE_MAP: dict[str, set[str]] = {
-    "jsonl": {".jsonl"},
-    "data": {".jsonl", ".json", ".csv"},
-    "image": {".png", ".jpg", ".jpeg", ".gif", ".webp"},
-    "pdf": {".pdf"},
-}
-
-
-def _parse_extensions(types: str) -> set[str] | None:
-    """types 문자열을 확장자 set으로 변환. 'all'이면 None 반환."""
-    if types == "all":
-        return None
-    extensions: set[str] = set()
-    for t in types.split(","):
-        t = t.strip().lower()
-        if t in _DOWNLOAD_TYPE_MAP:
-            extensions |= _DOWNLOAD_TYPE_MAP[t]
-        else:
-            extensions.add(f".{t}" if not t.startswith(".") else t)
-    return extensions or None
-
-
-@router.get("/download-folder-info")
+@router.get("/download-jsonl-info")
 @limiter.limit("30/minute")
-async def download_folder_info(
+async def download_jsonl_info(
     request: Request,
     date_str: str,
     task: str = "",
-    types: str = "all",
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """다운로드 사전 검증 — 파일 수, 총 용량 반환"""
+    """JSONL 다운로드 사전 검증 — 파일 수, 총 용량 반환"""
     safe_date = Path(date_str).name
     if not safe_date.isdigit() or len(safe_date) != 8:
         raise HTTPException(
@@ -454,11 +430,9 @@ async def download_folder_info(
             detail="날짜 형식이 올바르지 않습니다 (YYYYMMDD)",
         )
 
-    extensions = _parse_extensions(types)
-
     try:
         files = await gcs_service.list_all_blobs(
-            safe_date, task_id=task, extensions=extensions,
+            safe_date, task_id=task, extensions={".jsonl"},
         )
     except Exception as e:
         logger.exception("GCS 파일 목록 조회 실패")
@@ -472,136 +446,102 @@ async def download_folder_info(
     }
 
 
-@router.get("/download-folder")
+@router.get("/download-jsonl-all")
 @limiter.limit("10/minute")
-async def download_folder(
+async def download_jsonl_all(
     request: Request,
     date_str: str,
     task: str = "",
-    types: str = "all",
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """날짜 폴더 내 파일을 ZIP으로 다운로드 (방식 B: 서버 디스크 버퍼)
-
-    GCS → 서버 디스크에 병렬 다운로드 → ZIP 압축 → 브라우저 전송 → 임시 파일 정리.
-    Content-Length를 제공하여 브라우저 진행률 바 표시 가능.
-
-    Args:
-        types: 다운로드 대상 파일 유형.
-            - "all" (기본값): 전체 파일
-            - "jsonl": JSONL 파일만
-            - "data": JSONL + JSON + CSV
-            - "image": 이미지 파일만
-            - "pdf": PDF 파일만
-            - 쉼표 구분: "jsonl,image" 등 조합 가능
-    """
+    """날짜 폴더 내 JSONL 파일을 비동기 병렬 다운로드 → 인메모리 ZIP → 응답"""
+    import io
     import time
+    import zipfile
     from urllib.parse import quote
 
     safe_date = Path(date_str).name
     if not safe_date.isdigit() or len(safe_date) != 8:
         raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYYMMDD)")
 
-    extensions = _parse_extensions(types)
-    if types != "all" and extensions is None:
-        raise HTTPException(status_code=400, detail=f"유효하지 않은 파일 유형: {types}")
-
     task_label = task or "all"
-    zip_filename = f"{task_label}_{safe_date}.zip"
+    zip_filename = f"{task_label}_{safe_date}_jsonl.zip"
     start_time = time.monotonic()
-    tmp_dir: Path | None = None
-    zip_path: Path | None = None
 
     try:
-        # 1) GCS → 서버 디스크 병렬 다운로드
-        tmp_dir, files, errors = await gcs_service.download_folder_to_disk(
-            date_str=safe_date, task_id=task, extensions=extensions,
+        files = await gcs_service.list_all_blobs(
+            safe_date, task_id=task, extensions={".jsonl"},
         )
+        if not files:
+            raise HTTPException(status_code=404, detail="해당 폴더에 JSONL 파일이 없습니다")
 
-        total_size = sum(f.get("size", 0) for f in files)
-        logger.info(
-            "GCS download complete: date=%s task=%s files=%d size=%s errors=%d",
-            safe_date, task, len(files),
-            gcs_service._human_size(total_size), len(errors),
-        )
+        results = await gcs_service.download_blobs_concurrent(files)
 
-        # 2) ZIP 압축 (디스크)
-        zip_path = await gcs_service.create_zip_on_disk(
-            tmp_dir, files, zip_filename, errors=errors,
-        )
-        zip_size = zip_path.stat().st_size
-
-        # 3) 임시 다운로드 디렉터리 즉시 정리
-        gcs_service.cleanup_path(tmp_dir)
-        tmp_dir = None
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for rel_path, data in results:
+                zf.writestr(rel_path, data)
+        zip_bytes = buf.getvalue()
 
         duration_ms = int((time.monotonic() - start_time) * 1000)
+        total_size = sum(f.get("size", 0) for f in files)
 
-        # 4) DuckDB 다운로드 이력 기록
         try:
             await metadata_service.record_download(
                 user_id=current_user["user_id"],
                 display_name=current_user.get("display_name", ""),
                 task_id=task_label,
                 date_folder=safe_date,
-                file_types=types,
+                file_types="jsonl",
                 file_count=len(files),
                 total_size=total_size,
-                zip_size=zip_size,
+                zip_size=len(zip_bytes),
                 zip_filename=zip_filename,
-                status="completed" if not errors else "partial",
-                error_message=f"{len(errors)} files failed" if errors else None,
+                status="completed",
                 duration_ms=duration_ms,
             )
         except Exception as e:
             logger.warning("Download history recording failed: %s", e)
 
-        # 5) 브라우저에 ZIP 전송 + 전송 완료 후 ZIP 파일 정리
-        encoded_zip = quote(zip_filename)
-        final_zip_path = zip_path
-
-        async def _cleanup_zip() -> None:
-            gcs_service.cleanup_path(final_zip_path)
-            await audit_service.log(
-                action="gcs_folder_download",
-                request=request,
-                user_id=current_user["user_id"],
-                display_name=current_user.get("display_name", ""),
-                metadata={
-                    "date_str": safe_date,
-                    "task": task,
-                    "types": types,
-                    "file_count": len(files),
-                    "zip_filename": zip_filename,
-                    "zip_size": zip_size,
-                    "duration_ms": duration_ms,
-                    "errors": len(errors),
-                },
-            )
-
-        return FileResponse(
-            path=str(zip_path),
-            media_type="application/zip",
-            filename=zip_filename,
-            headers={
-                "Cache-Control": "no-store",
+        await audit_service.log(
+            action="gcs_jsonl_download",
+            request=request,
+            user_id=current_user["user_id"],
+            display_name=current_user.get("display_name", ""),
+            metadata={
+                "date_str": safe_date,
+                "task": task,
+                "file_count": len(files),
+                "zip_filename": zip_filename,
+                "zip_size": len(zip_bytes),
+                "duration_ms": duration_ms,
             },
-            background=BackgroundTask(_cleanup_zip),
         )
 
+        encoded_zip = quote(zip_filename)
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{encoded_zip}"; '
+                    f"filename*=UTF-8''{encoded_zip}"
+                ),
+                "Content-Length": str(len(zip_bytes)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    except HTTPException:
+        raise
     except NotFound:
         raise HTTPException(status_code=404, detail="해당 폴더에 파일이 없습니다")
     except GoogleCloudError as e:
         logger.error("GCS 다운로드 실패: %s", e)
         raise HTTPException(status_code=502, detail=f"GCS 다운로드 실패: {e}")
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.exception("ZIP 다운로드 중 예상치 못한 오류")
+        logger.exception("JSONL ZIP 다운로드 중 예상치 못한 오류")
         raise HTTPException(status_code=500, detail=f"다운로드 실패: {e}")
-    finally:
-        if tmp_dir and tmp_dir.exists():
-            gcs_service.cleanup_path(tmp_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -830,9 +770,9 @@ async def gcs_history(
 
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     response = templates.TemplateResponse(
+        request,
         "gcs_history.html",
         {
-            "request": request,
             "tasks": tasks,
             "selected_task": selected_task,
             "selected_task_name": (

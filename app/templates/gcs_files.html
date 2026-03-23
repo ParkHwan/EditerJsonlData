@@ -24,12 +24,8 @@
         <span>총 <strong>{{ files | length }}</strong>개 JSONL 파일</span>
         <div class="download-group">
             <button class="btn btn-sm btn-download-folder"
-                    onclick="downloadFolder('{{ date_str }}', '{{ task_id }}', 'jsonl')">
-                <span class="btn-download-icon">⬇</span> JSONL 다운로드
-            </button>
-            <button class="btn btn-sm btn-download-folder btn-download-all"
-                    onclick="downloadFolder('{{ date_str }}', '{{ task_id }}', 'all')">
-                <span class="btn-download-icon">⬇</span> 전체 다운로드
+                    onclick="downloadAllJsonl('{{ date_str }}', '{{ task_id }}')">
+                <span class="btn-download-icon">⬇</span> JSONL 전체 다운로드
             </button>
         </div>
     </div>
@@ -137,9 +133,6 @@
     }
     .btn-download-folder:hover { background: #0D47A1; }
     .btn-download-folder:disabled { background: #90CAF9; cursor: wait; }
-    .btn-download-all { background: #546E7A; }
-    .btn-download-all:hover { background: #37474F; }
-    .btn-download-all:disabled { background: #B0BEC5; cursor: wait; }
     .btn-download-icon { font-size: 14px; }
     .gcs-empty { background: #FFF3E0; padding: 20px; border-radius: 8px; text-align: center; color: #E65100; }
     .status-badge {
@@ -218,17 +211,17 @@ async function downloadFile(gcsPath, fileName, btn) {
     }
 }
 
-async function downloadFolder(dateStr, taskId, types) {
+async function downloadAllJsonl(dateStr, taskId) {
     const btn = event.target.closest('.btn-download-folder');
     const originalHTML = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-download-icon">⏳</span> 확인 중...';
 
-    const params = new URLSearchParams({ date_str: dateStr, types: types || 'all' });
+    const params = new URLSearchParams({ date_str: dateStr });
     if (taskId) params.append('task', taskId);
 
     try {
-        const infoResp = await fetch(`/api/v1/gcs/download-folder-info?${params.toString()}`, {
+        const infoResp = await fetch(`/api/v1/gcs/download-jsonl-info?${params.toString()}`, {
             credentials: 'same-origin',
         });
         if (!infoResp.ok) {
@@ -238,28 +231,27 @@ async function downloadFolder(dateStr, taskId, types) {
         const info = await infoResp.json();
 
         if (info.file_count === 0) {
-            throw new Error('해당 유형의 파일이 없습니다');
+            throw new Error('JSONL 파일이 없습니다');
         }
 
         const ok = confirm(
-            `폴더 전체 다운로드\n\n` +
+            `JSONL 전체 다운로드\n\n` +
             `파일 수: ${info.file_count.toLocaleString()}개\n` +
             `예상 용량: ${info.total_size_display}\n\n` +
-            `서버에서 압축 후 다운로드합니다.\n` +
-            `파일이 많으면 준비 시간이 소요됩니다.\n\n계속하시겠습니까?`
+            `서버에서 압축 후 다운로드합니다.\n계속하시겠습니까?`
         );
         if (!ok) return;
 
-        btn.innerHTML = '<span class="btn-download-icon">⏳</span> 서버 준비 중...';
-        showToast('서버에서 파일을 다운로드하고 압축하고 있습니다. 잠시 기다려 주세요...', 'success');
+        btn.innerHTML = '<span class="btn-download-icon">⏳</span> 준비 중...';
+        showToast('JSONL 파일을 다운로드하고 있습니다. 잠시 기다려 주세요...', 'info');
 
-        const resp = await fetch(`/api/v1/gcs/download-folder?${params.toString()}`, {
+        const resp = await fetch(`/api/v1/gcs/download-jsonl-all?${params.toString()}`, {
             credentials: 'same-origin',
         });
 
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }));
-            throw new Error(err.detail || 'ZIP 다운로드 실패');
+            throw new Error(err.detail || 'JSONL 다운로드 실패');
         }
 
         btn.innerHTML = '<span class="btn-download-icon">⬇</span> 다운로드 중...';
@@ -270,7 +262,7 @@ async function downloadFolder(dateStr, taskId, types) {
         }
 
         const disposition = resp.headers.get('Content-Disposition') || '';
-        let zipName = `${taskId || 'all'}_${dateStr}.zip`;
+        let zipName = `${taskId || 'all'}_${dateStr}_jsonl.zip`;
         const match = disposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
         if (match) zipName = decodeURIComponent(match[1]);
 
