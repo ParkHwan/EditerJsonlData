@@ -95,6 +95,11 @@ document.addEventListener('DOMContentLoaded', function() {
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         transition: box-shadow 0.2s;
+        overflow: hidden;
+        position: relative;
+    }
+    .katex {
+        position: relative;
     }
     .item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
     .item.type-concept {
@@ -184,6 +189,8 @@ document.addEventListener('DOMContentLoaded', function() {
         border-radius: 5px;
         border: 2px solid #F57C00;
         max-width: 90%;
+        overflow: hidden;
+        vertical-align: top;
     }
     .meta-key {
         font-weight: bold;
@@ -241,6 +248,8 @@ document.addEventListener('DOMContentLoaded', function() {
     .meta-image { margin: 10px 0; }
     .meta-image img {
         max-width: 500px;
+        max-height: 800px;
+        object-fit: contain;
         border: 2px solid #ddd;
         border-radius: 4px;
     }
@@ -263,17 +272,23 @@ document.addEventListener('DOMContentLoaded', function() {
         width: 100%;
         border-collapse: collapse;
         margin: 4px 0 10px;
+        table-layout: fixed;
     }
     table.info-table th,
     table.info-table td {
         border: 1px solid #ddd;
         padding: 10px;
         text-align: left;
+        overflow-wrap: break-word;
+        word-break: break-word;
     }
     table.info-table th {
         font-weight: bold;
         width: 150px;
         color: white;
+    }
+    table.info-table td {
+        overflow: hidden;
     }
 
     /* ── 보기 항목 ── */
@@ -297,6 +312,14 @@ document.addEventListener('DOMContentLoaded', function() {
     .math-block {
         display: inline;
         vertical-align: baseline;
+    }
+    .katex-display {
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+    .katex-display > .katex {
+        overflow-x: auto;
+        overflow-y: hidden;
     }
 
     /* ── 기타 ── */

@@ -461,6 +461,68 @@ td.editable-value[contenteditable="true"] {
     word-break: break-word;
 }
 
+/* ── 개행문자 심볼 ── */
+.nl-symbol {
+    display: inline-block;
+    background: #EF6C00;
+    color: #FFFFFF;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin: 0 1px;
+    font-family: 'Courier New', monospace;
+    vertical-align: middle;
+    line-height: 1.5;
+    cursor: default;
+    user-select: none;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* ── 카드 하단 페이지네이션 ── */
+.card-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 14px 20px;
+    margin-top: 12px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+}
+.btn-page-prev, .btn-page-next {
+    padding: 8px 20px;
+    border: 1px solid #1976D2;
+    background: white;
+    color: #1976D2;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.btn-page-prev:hover:not(:disabled), .btn-page-next:hover:not(:disabled) {
+    background: #1976D2;
+    color: white;
+}
+.btn-page-prev:disabled, .btn-page-next:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: #bdbdbd;
+    color: #bdbdbd;
+}
+.page-indicator {
+    font-size: 13px;
+    color: #616161;
+    font-weight: 500;
+    min-width: 120px;
+    text-align: center;
+}
+
 /* ── 편집 비활성화 상태 ── */
 .btn-edit[disabled] {
     opacity: 0.4;
@@ -500,6 +562,37 @@ td.editable-value[contenteditable="true"] {
 }
 .btn-delete-key:hover {
     background: #EF9A9A;
+}
+.move-key-wrap {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0;
+    margin-right: 5px;
+    vertical-align: middle;
+    background: rgba(255,255,255,0.25);
+    border-radius: 3px;
+    border-right: 1px solid rgba(255,255,255,0.3);
+    padding: 1px;
+}
+.btn-move-key {
+    padding: 1px 4px;
+    background: rgba(255,255,255,0.85);
+    color: #333;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.1;
+    transition: all 0.15s;
+}
+.btn-move-key:hover {
+    background: #fff;
+    color: #1565C0;
+}
+.btn-move-key:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 .new-key-row td {
     background: #E8F5E9 !important;
@@ -588,6 +681,11 @@ td.editable-value[contenteditable="true"] {
             <div id="cardContainer">
                 <!-- AJAX로 렌더링된 카드 삽입 -->
             </div>
+            <div class="card-pagination" id="cardPagination" style="display:none;">
+                <button class="btn-page-prev" id="btnPagePrev" onclick="navigatePrev()" disabled>◀ 이전</button>
+                <span class="page-indicator" id="pageIndicator"></span>
+                <button class="btn-page-next" id="btnPageNext" onclick="navigateNext()" disabled>다음 ▶</button>
+            </div>
         </div>
     </div>
 </div>
@@ -619,6 +717,7 @@ let isFileLockedByMe = false;
 
 const deletedKeys = new Set();
 const addedKeys = new Map();
+const reorderedSections = new Map();
 
 // ── 파일 Lock 상태 UI 업데이트 ──
 function updateFileLockUI() {
@@ -864,6 +963,53 @@ async function selectItem(el, rowIdx, dataId) {
     } catch (e) {
         container.innerHTML = `<div class="error-msg">카드 로드 실패: ${e.message}</div>`;
     }
+
+    updatePagination(el);
+}
+
+function updatePagination(currentEl) {
+    const pagination = document.getElementById('cardPagination');
+    const allItems = [...document.querySelectorAll('.sidebar-item')].filter(
+        i => i.style.display !== 'none'
+    );
+    const currentIdx = allItems.indexOf(currentEl);
+    const total = allItems.length;
+
+    pagination.style.display = 'flex';
+
+    const prevBtn = document.getElementById('btnPagePrev');
+    const nextBtn = document.getElementById('btnPageNext');
+    const indicator = document.getElementById('pageIndicator');
+
+    prevBtn.disabled = currentIdx <= 0;
+    nextBtn.disabled = currentIdx >= total - 1;
+    indicator.textContent = `${currentIdx + 1} / ${total}`;
+}
+
+async function navigatePrev() {
+    const allItems = [...document.querySelectorAll('.sidebar-item')].filter(
+        i => i.style.display !== 'none'
+    );
+    const active = document.querySelector('.sidebar-item.active');
+    const idx = allItems.indexOf(active);
+    if (idx > 0) {
+        const prev = allItems[idx - 1];
+        await selectItem(prev, parseInt(prev.dataset.rowIdx, 10), prev.dataset.dataId || '');
+        prev.scrollIntoView({ block: 'nearest' });
+    }
+}
+
+async function navigateNext() {
+    const allItems = [...document.querySelectorAll('.sidebar-item')].filter(
+        i => i.style.display !== 'none'
+    );
+    const active = document.querySelector('.sidebar-item.active');
+    const idx = allItems.indexOf(active);
+    if (idx < allItems.length - 1) {
+        const next = allItems[idx + 1];
+        await selectItem(next, parseInt(next.dataset.rowIdx, 10), next.dataset.dataId || '');
+        next.scrollIntoView({ block: 'nearest' });
+    }
 }
 
 // ══════════════════════════════════════════════
@@ -924,18 +1070,15 @@ function enterInlineEdit(card) {
             el.textContent = '';
             el.contentEditable = 'true';
         } else if (typeof rawValue === 'string') {
+            const displayValue = rawValue
+                .replace(/\\/g, '\\\\')
+                .replace(/\n/g, '\\n')
+                .replace(/\t/g, '\\t')
+                .replace(/\r/g, '\\r');
+            el.textContent = displayValue;
+            el.contentEditable = 'true';
             if (/[\n\t\r]/.test(rawValue)) {
-                const rows = Math.min(Math.max(rawValue.split('\n').length, 3), 20);
-                el.innerHTML = '';
-                const ta = document.createElement('textarea');
-                ta.className = 'inline-edit-ta';
-                ta.rows = rows;
-                ta.value = rawValue;
-                el.appendChild(ta);
-                el.dataset.useTextarea = 'true';
-            } else {
-                el.textContent = rawValue;
-                el.contentEditable = 'true';
+                el.dataset.hasEscapes = 'true';
             }
         } else {
             const jsonStr = JSON.stringify(rawValue, null, 2);
@@ -973,18 +1116,14 @@ function enterInlineEdit(card) {
                         <textarea class="inline-edit-ta" data-original-type="${classifyValueType(v)}" rows="${rows}">${escapeHtml(displayVal)}</textarea>
                     </td>
                 </tr>`;
-            } else if (typeof v === 'string' && /[\n\t\r]/.test(v)) {
-                const rows = Math.min(Math.max(v.split('\n').length, 2), 10);
-                metaHtml += `<tr>
-                    <th style="background-color:#E65100;color:white;width:150px;">${escapeHtml(k)}</th>
-                    <td class="editable-value" data-field="${escapeHtml(metaField)}" data-editing="true" data-use-textarea="true">
-                        <textarea class="inline-edit-ta" rows="${rows}">${escapeHtml(v)}</textarea>
-                    </td>
-                </tr>`;
             } else {
+                const metaDisplay = typeof v === 'string'
+                    ? v.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/\r/g, '\\r')
+                    : String(v);
+                const hasEsc = typeof v === 'string' && /[\n\t\r]/.test(v);
                 metaHtml += `<tr>
                     <th style="background-color:#E65100;color:white;width:150px;">${escapeHtml(k)}</th>
-                    <td class="editable-value" data-field="${escapeHtml(metaField)}" data-editing="true" contenteditable="true">${escapeHtml(displayVal)}</td>
+                    <td class="editable-value" data-field="${escapeHtml(metaField)}" data-editing="true" contenteditable="true"${hasEsc ? ' data-has-escapes="true"' : ''}>${escapeHtml(metaDisplay)}</td>
                 </tr>`;
             }
         }
@@ -997,6 +1136,7 @@ function enterInlineEdit(card) {
 
     card.querySelectorAll('.btn-add-key').forEach(b => b.style.display = '');
     card.querySelectorAll('.btn-delete-key').forEach(b => b.style.display = '');
+    card.querySelectorAll('.move-key-wrap').forEach(w => w.style.display = 'inline-flex');
 
     const actions = card.querySelector('.header-actions');
     actions.dataset.originalHtml = actions.innerHTML;
@@ -1013,6 +1153,14 @@ function enterInlineEdit(card) {
 // ══════════════════════════════════════════════
 //  값 헬퍼 함수
 // ══════════════════════════════════════════════
+function unescapeEditValue(text) {
+    return text
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\r/g, '\r')
+        .replace(/\\\\/g, '\\');
+}
+
 function getNestedValue(obj, path) {
     const parts = path.split('.');
     let current = obj;
@@ -1144,6 +1292,9 @@ function validateAllChanges() {
             }
         } else {
             newValue = el.textContent.trim();
+            if (el.dataset.hasEscapes === 'true') {
+                newValue = unescapeEditValue(newValue);
+            }
             if (!newValue && rawOriginal !== null && rawOriginal !== undefined && rawOriginal !== '') {
                 warnings.push({ field, msg: '값이 비어 있습니다 (원래 값 존재)' });
             }
@@ -1173,6 +1324,22 @@ function validateAllChanges() {
             const newVal = el ? el.textContent.trim() : '';
             if (newVal) {
                 changes.push({ field: fieldPath, from: '(신규)', to: newVal });
+            }
+        }
+    }
+
+    for (const [sectionPath, keyOrder] of reorderedSections) {
+        const origData = getNestedValue(rawEditData, sectionPath);
+        if (origData && typeof origData === 'object') {
+            const origKeys = Object.keys(origData);
+            const origVisible = origKeys.filter(k => !deletedKeys.has(`${sectionPath}.${k}`));
+            const newVisible = keyOrder.filter(k => !deletedKeys.has(`${sectionPath}.${k}`));
+            if (JSON.stringify(origVisible) !== JSON.stringify(newVisible)) {
+                changes.push({
+                    field: `${sectionPath} (키 순서)`,
+                    from: origVisible.join(' → '),
+                    to: newVisible.join(' → ')
+                });
             }
         }
     }
@@ -1286,6 +1453,55 @@ function showSaveConfirm(validation) {
             }
         });
     });
+}
+
+// ══════════════════════════════════════════════
+//  키 순서 이동
+// ══════════════════════════════════════════════
+function moveKeyUp(sectionPath, key) {
+    if (currentRowIdx === null) return;
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return;
+    const sectionBlock = card.querySelector(`[data-section="${sectionPath}"]`);
+    if (!sectionBlock) return;
+
+    const row = sectionBlock.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
+    if (!row || !row.parentNode) return;
+    const tbody = row.parentNode;
+    const visibleRows = [...tbody.querySelectorAll('tr:not(.pending-delete)')];
+    const idx = visibleRows.indexOf(row);
+    if (idx <= 0) return;
+
+    const prevRow = visibleRows[idx - 1];
+    tbody.insertBefore(row, prevRow);
+    trackSectionOrder(sectionPath, sectionBlock);
+}
+
+function moveKeyDown(sectionPath, key) {
+    if (currentRowIdx === null) return;
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return;
+    const sectionBlock = card.querySelector(`[data-section="${sectionPath}"]`);
+    if (!sectionBlock) return;
+
+    const row = sectionBlock.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
+    if (!row || !row.parentNode) return;
+    const tbody = row.parentNode;
+    const visibleRows = [...tbody.querySelectorAll('tr:not(.pending-delete)')];
+    const idx = visibleRows.indexOf(row);
+    if (idx < 0 || idx >= visibleRows.length - 1) return;
+
+    const nextRow = visibleRows[idx + 1];
+    tbody.insertBefore(nextRow, row);
+    trackSectionOrder(sectionPath, sectionBlock);
+}
+
+function trackSectionOrder(sectionPath, sectionBlock) {
+    const tbody = sectionBlock.querySelector('table tbody') || sectionBlock.querySelector('table');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr[data-key]:not(.pending-delete)');
+    const keyOrder = [...rows].map(r => r.dataset.key);
+    reorderedSections.set(sectionPath, keyOrder);
 }
 
 // ══════════════════════════════════════════════
@@ -1446,6 +1662,9 @@ function collectInlineChanges() {
             }
         } else {
             value = el.textContent.trim();
+            if (el.dataset.hasEscapes === 'true') {
+                value = unescapeEditValue(value);
+            }
             if (origType === 'number') {
                 const num = Number(value);
                 if (!isNaN(num)) value = num;
@@ -1457,7 +1676,7 @@ function collectInlineChanges() {
         setNestedValue(changes, field, value);
     });
 
-    if (deletedKeys.size > 0 || addedKeys.size > 0) {
+    if (deletedKeys.size > 0 || addedKeys.size > 0 || reorderedSections.size > 0) {
         modifiedTopKeys.add('add_info');
     }
 
@@ -1485,6 +1704,29 @@ function collectInlineChanges() {
             if (obj && lastKey in obj) {
                 delete obj[lastKey];
             }
+        }
+    }
+
+    for (const [sectionPath, keyOrder] of reorderedSections) {
+        const parts = sectionPath.split('.');
+        let obj = changes;
+        for (const p of parts) {
+            if (!obj || !obj[p]) break;
+            obj = obj[p];
+        }
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+            const reordered = {};
+            for (const k of keyOrder) {
+                if (k in obj) reordered[k] = obj[k];
+            }
+            for (const k of Object.keys(obj)) {
+                if (!(k in reordered)) reordered[k] = obj[k];
+            }
+            let target = changes;
+            for (let i = 0; i < parts.length - 1; i++) {
+                target = target[parts[i]];
+            }
+            target[parts[parts.length - 1]] = reordered;
         }
     }
 
@@ -1556,6 +1798,7 @@ async function cancelEdit() {
             el.contentEditable = 'false';
             el.removeAttribute('data-editing');
             el.removeAttribute('data-use-textarea');
+            el.removeAttribute('data-has-escapes');
         });
 
         const metaSection = document.getElementById('inlineContentMeta');
@@ -1578,8 +1821,23 @@ async function cancelEdit() {
             row.remove();
         });
 
+        for (const [sectionPath] of reorderedSections) {
+            const sectionBlock = card.querySelector(`[data-section="${sectionPath}"]`);
+            if (!sectionBlock) continue;
+            const table = sectionBlock.querySelector('table');
+            if (!table) continue;
+            const origData = getNestedValue(rawEditData, sectionPath);
+            if (!origData || typeof origData !== 'object') continue;
+            const origKeys = Object.keys(origData);
+            for (const k of origKeys) {
+                const row = table.querySelector(`tr[data-key="${CSS.escape(k)}"]`);
+                if (row) table.appendChild(row);
+            }
+        }
+
         card.querySelectorAll('.btn-add-key').forEach(b => b.style.display = 'none');
         card.querySelectorAll('.btn-delete-key').forEach(b => b.style.display = 'none');
+        card.querySelectorAll('.move-key-wrap').forEach(w => w.style.display = 'none');
 
         card.classList.remove('inline-editing');
         const status = card.querySelector('.inline-edit-status');
@@ -1611,6 +1869,7 @@ async function exitInlineEdit() {
     pendingDraftData = null;
     deletedKeys.clear();
     addedKeys.clear();
+    reorderedSections.clear();
 }
 
 // ══════════════════════════════════════════════
@@ -1678,7 +1937,15 @@ function applyChangesToCard(card, obj, prefix) {
                     const ta = el.querySelector('.inline-edit-ta');
                     if (ta) ta.value = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
                 } else {
-                    el.textContent = typeof value === 'string' ? value : JSON.stringify(value);
+                    let displayVal = typeof value === 'string' ? value : JSON.stringify(value);
+                    if (el.dataset.hasEscapes === 'true' && typeof value === 'string') {
+                        displayVal = value
+                            .replace(/\\/g, '\\\\')
+                            .replace(/\n/g, '\\n')
+                            .replace(/\t/g, '\\t')
+                            .replace(/\r/g, '\\r');
+                    }
+                    el.textContent = displayVal;
                 }
             }
         }

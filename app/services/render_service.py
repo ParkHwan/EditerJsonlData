@@ -90,6 +90,9 @@ def restore_math_expressions(html: str, placeholders: dict[str, str]) -> str:
     return html
 
 
+NEWLINE_SYMBOL = '<span class="nl-symbol" title="줄바꿈 (\\n)">↵</span><br>'
+
+
 def format_text_with_newlines(text: Any) -> str:
     """줄바꿈 + 수식 보존을 함께 처리"""
     if text is None:
@@ -97,7 +100,7 @@ def format_text_with_newlines(text: Any) -> str:
     text = str(text)
 
     text, placeholders = protect_math_expressions(text)
-    html = escape_html(text).replace("\n", "<br>")
+    html = escape_html(text).replace("\n", NEWLINE_SYMBOL)
     html = restore_math_expressions(html, placeholders)
 
     return html
@@ -373,7 +376,7 @@ def process_content_with_tags(
             else:
                 result += f'<span class="tag-placeholder">{escape_html(part)}</span>'
         else:
-            escaped = escape_html(part).replace("\n", "<br>")
+            escaped = escape_html(part).replace("\n", NEWLINE_SYMBOL)
             result += f"<span>{escaped}</span>"
 
     # Step 3: 수식 복원
@@ -551,7 +554,19 @@ def render_item_card(
             value_color = colors["value"]
 
             row_attr = f' data-key="{escape_html(k)}"' if is_key_editable else ""
-            html += f'<tr{row_attr}><th style="background-color: {key_color};">{escape_html(k)}'
+            html += f'<tr{row_attr}><th style="background-color: {key_color};">'
+            if is_key_editable:
+                html += (
+                    f'<span class="move-key-wrap" style="display:none;">'
+                    f'<button class="btn-move-key" '
+                    f"onclick=\"moveKeyUp('{section_path}', '{escape_html(k)}')\" "
+                    f'title="위로 이동">▲</button>'
+                    f'<button class="btn-move-key" '
+                    f"onclick=\"moveKeyDown('{section_path}', '{escape_html(k)}')\" "
+                    f'title="아래로 이동">▼</button>'
+                    f"</span>"
+                )
+            html += escape_html(k)
             if is_key_editable:
                 html += (
                     f'<button class="btn-delete-key" style="display:none;" '
