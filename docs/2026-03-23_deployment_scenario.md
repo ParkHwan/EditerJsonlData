@@ -208,17 +208,22 @@ curl -s http://localhost/api/v1/health | python3 -m json.tool
 
 ### 5.4 DuckDB 호환성 확인
 
+> **주의**: DuckDB는 단일 프로세스만 파일에 접근 가능. 실행 중인 Gunicorn 워커가 Lock을 잡고 있으므로 별도 프로세스로 직접 연결 불가.
+
 ```bash
-# web 컨테이너에서 DuckDB 파일 상태 확인
+# 방법 1: 헬스체크 API로 DuckDB 상태 확인 (권장)
+curl -s http://localhost/api/v1/health | python3 -m json.tool
+# → "status": "healthy" 확인 (DuckDB 연결 포함)
+
+# 방법 2: DuckDB 모듈 버전만 확인
 docker exec editer-jsonl-web python3 -c "
 import duckdb
 print(f'DuckDB version: {duckdb.__version__}')
-conn = duckdb.connect('/app/data/editor.duckdb', read_only=True)
-print(f'Users: {conn.execute(\"SELECT count(*) FROM users\").fetchone()[0]}')
-print(f'Files: {conn.execute(\"SELECT count(*) FROM file_registry\").fetchone()[0]}')
-conn.close()
-print('DuckDB OK')
+print('DuckDB 모듈 로드 OK')
 "
+
+# 방법 3: 로그인 테스트 (DuckDB users 테이블 조회 성공 = 호환성 정상)
+# 브라우저에서 로그인 성공 여부로 확인
 ```
 
 > **DuckDB 직렬화 에러 발생 시**:
