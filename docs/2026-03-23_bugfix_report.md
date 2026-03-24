@@ -300,13 +300,199 @@ function showKeyInputDialog(message, onConfirm) {
 
 ---
 
+## BUG-22: 키 삭제 후 취소 시 삭제된 키가 복원되지 않음
+
+| 항목 | 내용 |
+|---|---|
+| **증상** | 편집 모드에서 `add_info.풀이` 딕셔너리의 "정답"이나 "해설" 키를 삭제한 후 "취소" 버튼을 클릭하면, 삭제된 키가 복원되지 않고 삭제된 상태로 유지됨 |
+| **원인** | `deleteKeyFromSection()`에서 `row.remove()`로 DOM 요소를 완전히 제거하여, `cancelEdit()` 시 이미 DOM에서 사라진 행을 복원할 수 없음 |
+| **영향** | 편집 취소 시 원본 데이터가 정확히 복원되지 않음. 의도치 않은 데이터 손실 가능 |
+
+### 원인 상세
+
+```
+편집 흐름:
+1. enterInlineEdit() → originalHtmlMap에 각 editable 요소의 원본 HTML 저장
+2. deleteKeyFromSection('add_info.풀이', '정답') 호출
+   → row.remove() 로 <tr> DOM 요소 완전 제거 ← 문제 지점
+   → deletedKeys.add('add_info.풀이.정답')
+3. cancelEdit() 호출
+   → card.querySelectorAll('.editable-value[data-editing="true"]') 순회
+   → 이미 DOM에서 제거된 행은 querySelectorAll에 포함되지 않음
+   → 삭제된 키의 행이 복원되지 않음
+```
+
+### 수정 내용
+
+#### 1. `deleteKeyFromSection()` — DOM 보존 (remove → hide)
+
+```javascript
+// 이전: DOM에서 완전 제거
+const row = sectionBlock.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
+if (row) {
+    row.remove();
+}
+
+// 이후: 숨김 처리 + 상태 마킹 (DOM 보존)
+const row = sectionBlock.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
+if (row) {
+    row.style.display = 'none';
+    row.classList.add('pending-delete');
+}
+```
+
+#### 2. `cancelEdit()` — 삭제 예정 행 복원 + 새로 추가된 행 제거
+
+```javascript
+// 삭제 예정(pending-delete) 행 복원: 다시 표시
+card.querySelectorAll('.pending-delete').forEach(row => {
+    row.style.display = '';
+    row.classList.remove('pending-delete');
+});
+
+// 새로 추가된 행(new-key-row) 제거: 취소 시 원래 없던 행은 삭제
+card.querySelectorAll('.new-key-row').forEach(row => {
+    row.remove();
+});
+```
+
+#### 3. `validateAllChanges()` / `collectInlineChanges()` — 숨겨진 행 필터링
+
+```javascript
+// 두 함수 모두 editable 순회 시 pending-delete 행 건너뛰기
+editables.forEach(el => {
+    if (el.closest('.pending-delete')) return;  // ← 추가
+    // ... 기존 로직
+});
+```
+
+### 동작 흐름 (수정 후)
+
+| 시나리오 | 키 삭제 | 취소 | 저장 |
+|---|---|---|---|
+| 기존 키 삭제 | `display:none` + `pending-delete` | 행 표시 복원 | `deletedKeys`로 서버에 삭제 전달 |
+| 새 키 추가 후 삭제 | `display:none` + `pending-delete` | `new-key-row` 행 제거 | `addedKeys`에서 제거됨 |
+| 새 키 추가 (삭제 안 함) | — | `new-key-row` 행 제거 | `addedKeys`로 서버에 추가 전달 |
+
+### 변경 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `app/templates/editor.html` | `deleteKeyFromSection()` DOM 보존, `cancelEdit()` 복원 로직, `validateAllChanges()` / `collectInlineChanges()` 필터링 |
+
+---
+
+## BUG-23: 데이터 전환 시 화면 늘어남 (스크롤 위치 미초기화)
+
+| 항목 | 내용 |
+|---|---|
+| **증상** | 텍스트가 긴 데이터를 아래 스크롤로 확인한 후 다른 데이터 ID를 선택하면, 화면이 아래로 늘어난 상태로 유지됨 |
+| **원인** | `selectItem()`에서 새 항목 선택 시 `.detail-panel`의 `scrollTop`을 초기화하지 않아, 이전 항목에서 스크롤한 위치가 다음 항목에도 유지됨 |
+| **영향** | 짧은 데이터 선택 시에도 화면 하단에 빈 공간이 보이거나, 콘텐츠가 보이지 않는 위치에서 시작됨 |
+
+### 수정 내용
+
+```javascript
+// selectItem() — 새 항목 로드 전 스크롤 위치 초기화
+const detailPanel = document.getElementById('detailPanel');
+detailPanel.scrollTop = 0;
+```
+
+### 변경 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `app/templates/editor.html` | `selectItem()`에서 `detailPanel.scrollTop = 0` 추가 |
+
+---
+
+## BUG-24: 편집 모드에서 문자열 개행문자(\n) 미표시
+
+| 항목 | 내용 |
+|---|---|
+| **증상** | `content` 등 문자열 값에 포함된 개행문자(`\n`), 탭문자(`\t`)가 편집 모드에서 보이지 않음 |
+| **원인** | `enterInlineEdit()`에서 문자열을 `el.textContent = rawValue`로 설정한 후 `contenteditable`을 사용. HTML에서 `contenteditable` 요소는 기본적으로 `white-space: normal`이므로 개행/탭 문자가 공백으로 collapse됨 |
+| **영향** | 개행이 포함된 텍스트를 편집할 때 원본 구조를 확인할 수 없음. 의도치 않게 개행 삭제 가능 |
+
+### 수정 내용
+
+개행/탭 문자가 포함된 문자열은 `contenteditable` 대신 `<textarea>`로 전환하여 줄바꿈이 정확히 표시되도록 수정:
+
+#### `enterInlineEdit()` — 카드 editable 요소
+
+```javascript
+// 이전: 모든 문자열에 contenteditable 사용
+} else if (typeof rawValue === 'string') {
+    el.textContent = rawValue;
+    el.contentEditable = 'true';
+}
+
+// 이후: 개행/탭 포함 문자열은 textarea 사용
+} else if (typeof rawValue === 'string') {
+    if (/[\n\t\r]/.test(rawValue)) {
+        const rows = Math.min(Math.max(rawValue.split('\n').length, 3), 20);
+        el.innerHTML = '';
+        const ta = document.createElement('textarea');
+        ta.className = 'inline-edit-ta';
+        ta.rows = rows;
+        ta.value = rawValue;
+        el.appendChild(ta);
+        el.dataset.useTextarea = 'true';
+    } else {
+        el.textContent = rawValue;
+        el.contentEditable = 'true';
+    }
+}
+```
+
+#### `content_meta` 섹션 — 동일 패턴 적용
+
+```javascript
+// 이전: 모든 문자열에 contenteditable
+} else {
+    metaHtml += `<td ... contenteditable="true">${escapeHtml(displayVal)}</td>`;
+}
+
+// 이후: 개행/탭 포함 문자열은 textarea
+} else if (typeof v === 'string' && /[\n\t\r]/.test(v)) {
+    const rows = Math.min(Math.max(v.split('\n').length, 2), 10);
+    metaHtml += `<td ... data-use-textarea="true">
+        <textarea class="inline-edit-ta" rows="${rows}">${escapeHtml(v)}</textarea>
+    </td>`;
+} else {
+    metaHtml += `<td ... contenteditable="true">${escapeHtml(displayVal)}</td>`;
+}
+```
+
+### 값 수집 호환성
+
+기존 `collectInlineChanges()` / `validateAllChanges()` 코드가 `useTextarea` 분기에서 문자열을 올바르게 처리:
+
+```javascript
+if (el.dataset.useTextarea === 'true') {
+    const ta = el.querySelector('.inline-edit-ta');
+    const text = ta ? ta.value.trim() : '';
+    // origType이 'string'이므로 else 분기로 진입
+    try { value = JSON.parse(text); } catch { value = text; }
+    // → JSON.parse 실패 시 textarea 텍스트 그대로 사용 (개행 보존)
+}
+```
+
+### 변경 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `app/templates/editor.html` | `enterInlineEdit()` 문자열 textarea 전환, `content_meta` 문자열 textarea 전환 |
+
+---
+
 ## 변경 파일 전체 요약
 
 | 파일 | BUG | 설명 |
 |---|---|---|
 | `app/api/v1/endpoints/files.py` | 16, 20 | TemplateResponse API 수정, gcs_task 전달 |
 | `app/api/v1/endpoints/gcs.py` | 16, 20 | TemplateResponse API 수정, open-edit working copy 재사용 |
-| `app/templates/editor.html` | 18, 19, 20, 21 | content_full 복원, CSS 추가, 편집 흐름 이동, IME 모달 |
+| `app/templates/editor.html` | 18, 19, 20, 21, 22, 23, 24 | content_full 복원, CSS 추가, 편집 흐름 이동, IME 모달, 키 삭제 취소 복원, 스크롤 초기화, 문자열 textarea |
 | `pyproject.toml` | 17 | DuckDB 버전 핀 (>=1.5.0,<1.6.0) |
 
 ### Git 커밋 이력
