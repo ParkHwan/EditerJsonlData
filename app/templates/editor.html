@@ -838,6 +838,9 @@ async function selectItem(el, rowIdx, dataId) {
     document.getElementById('detailContent').style.display = 'block';
     document.getElementById('detailTitle').textContent = `${dataId} (Row ${rowIdx + 1})`;
 
+    const detailPanel = document.getElementById('detailPanel');
+    detailPanel.scrollTop = 0;
+
     const container = document.getElementById('cardContainer');
     container.innerHTML = '<div class="loading-spinner">로딩 중...</div>';
 
@@ -921,8 +924,19 @@ function enterInlineEdit(card) {
             el.textContent = '';
             el.contentEditable = 'true';
         } else if (typeof rawValue === 'string') {
-            el.textContent = rawValue;
-            el.contentEditable = 'true';
+            if (/[\n\t\r]/.test(rawValue)) {
+                const rows = Math.min(Math.max(rawValue.split('\n').length, 3), 20);
+                el.innerHTML = '';
+                const ta = document.createElement('textarea');
+                ta.className = 'inline-edit-ta';
+                ta.rows = rows;
+                ta.value = rawValue;
+                el.appendChild(ta);
+                el.dataset.useTextarea = 'true';
+            } else {
+                el.textContent = rawValue;
+                el.contentEditable = 'true';
+            }
         } else {
             const jsonStr = JSON.stringify(rawValue, null, 2);
             const rows = Math.min(Math.max(jsonStr.split('\n').length, 3), 15);
@@ -957,6 +971,14 @@ function enterInlineEdit(card) {
                     <th style="background-color:#E65100;color:white;width:150px;">${escapeHtml(k)}</th>
                     <td class="editable-value" data-field="${escapeHtml(metaField)}" data-editing="true" data-use-textarea="true">
                         <textarea class="inline-edit-ta" data-original-type="${classifyValueType(v)}" rows="${rows}">${escapeHtml(displayVal)}</textarea>
+                    </td>
+                </tr>`;
+            } else if (typeof v === 'string' && /[\n\t\r]/.test(v)) {
+                const rows = Math.min(Math.max(v.split('\n').length, 2), 10);
+                metaHtml += `<tr>
+                    <th style="background-color:#E65100;color:white;width:150px;">${escapeHtml(k)}</th>
+                    <td class="editable-value" data-field="${escapeHtml(metaField)}" data-editing="true" data-use-textarea="true">
+                        <textarea class="inline-edit-ta" rows="${rows}">${escapeHtml(v)}</textarea>
                     </td>
                 </tr>`;
             } else {
