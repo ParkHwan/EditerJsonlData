@@ -121,7 +121,7 @@ echo ""
 docker images asia-northeast1-docker.pkg.dev/crowdworks-platform/editer-jsonl/web --format='{{.Tag}}\t{{.CreatedAt}}'
 
 # 헬스체크
-curl -s http://localhost/api/v1/health | python3 -m json.tool
+curl -s http://localhost/api/v1/health | python -m json.tool
 ```
 
 ### 4.3 DuckDB 백업 (중요!)
@@ -186,7 +186,7 @@ docker compose -f docker-compose.prod.yml logs web 2>&1 | grep -i "error\|traceb
 
 ```bash
 # API 헬스체크
-curl -s http://localhost/api/v1/health | python3 -m json.tool
+curl -s http://localhost/api/v1/health | python -m json.tool
 # → "status": "healthy" 확인
 ```
 
