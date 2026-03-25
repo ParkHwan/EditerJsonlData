@@ -626,6 +626,17 @@ td.editable-value[contenteditable="true"] {
 .section-block {
     margin-bottom: 8px;
 }
+.special-key-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.25);
+    color: #FFD54F;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
 </style>
 {% endblock %}
 
@@ -1089,6 +1100,10 @@ function enterInlineEdit(card) {
             ta.rows = rows;
             ta.value = jsonStr;
             ta.dataset.originalType = classifyValueType(rawValue);
+            const allowed = getAllowedTypesForField(field);
+            if (allowed) {
+                ta.dataset.allowedTypes = allowed.join(',');
+            }
             el.appendChild(ta);
             attachJsonValidator(ta);
             el.dataset.useTextarea = 'true';
@@ -1228,11 +1243,21 @@ function attachJsonValidator(ta) {
             const parsed = JSON.parse(text);
             const origType = ta.dataset.originalType || '';
             const newType = classifyValueType(parsed);
+            const allowedRaw = ta.dataset.allowedTypes || '';
+            const allowedTypes = allowedRaw ? allowedRaw.split(',') : [];
+
             if (origType && origType !== newType && origType !== 'null') {
-                ta.classList.remove('json-valid');
-                ta.classList.add('json-invalid');
-                msgEl.className = 'json-validation-msg invalid';
-                msgEl.textContent = `⛔ 타입 변경 감지: ${origType} → ${newType} (원본 구조를 유지하세요)`;
+                if (allowedTypes.length > 0 && allowedTypes.includes(newType)) {
+                    ta.classList.remove('json-invalid');
+                    ta.classList.add('json-valid');
+                    msgEl.className = 'json-validation-msg warning';
+                    msgEl.textContent = `⚠ 타입 변경 감지: ${origType} → ${newType} (허용된 타입: ${allowedTypes.join(', ')})`;
+                } else {
+                    ta.classList.remove('json-valid');
+                    ta.classList.add('json-invalid');
+                    msgEl.className = 'json-validation-msg invalid';
+                    msgEl.textContent = `⛔ 타입 변경 감지: ${origType} → ${newType} (원본 구조를 유지하세요)`;
+                }
             } else {
                 ta.classList.remove('json-invalid');
                 ta.classList.add('json-valid');
@@ -1280,7 +1305,12 @@ function validateAllChanges() {
                     const parsed = JSON.parse(text);
                     const newType = classifyValueType(parsed);
                     if (origType !== newType) {
-                        errors.push({ field, msg: `타입 변경: ${origType} → ${newType}` });
+                        const allowed = getAllowedTypesForField(field);
+                        if (allowed && allowed.includes(newType)) {
+                            warnings.push({ field, msg: `타입 변경: ${origType} → ${newType} (허용된 타입: ${allowed.join(', ')})` });
+                        } else {
+                            errors.push({ field, msg: `타입 변경: ${origType} → ${newType}` });
+                        }
                     }
                     newValue = parsed;
                 } catch (e) {
@@ -1507,6 +1537,23 @@ function trackSectionOrder(sectionPath, sectionBlock) {
 // ══════════════════════════════════════════════
 //  키 추가 / 삭제
 // ══════════════════════════════════════════════
+const SPECIAL_KEY_TYPES = {
+    '보기': { type: 'array', allowedTypes: ['array', 'dict'], template: '[\n  "항목1",\n  "항목2",\n  "항목3"\n]', label: 'list 또는 dict' },
+    '선택지': { type: 'dict', allowedTypes: ['dict'], template: '{\n  "①": "선택지1",\n  "②": "선택지2",\n  "③": "선택지3",\n  "④": "선택지4"\n}', label: 'dict' },
+    '매칭항목': { type: 'array', allowedTypes: ['array'], template: '[\n  ["좌측1", "좌측2", "좌측3"],\n  ["우측1", "우측2", "우측3"]\n]', label: '중첩 list' }
+};
+
+function getFieldKeyName(fieldPath) {
+    const parts = fieldPath.split('.');
+    return parts[parts.length - 1];
+}
+
+function getAllowedTypesForField(fieldPath) {
+    const keyName = getFieldKeyName(fieldPath);
+    const info = SPECIAL_KEY_TYPES[keyName];
+    return info ? info.allowedTypes : null;
+}
+
 function addKeyToSection(sectionPath) {
     if (currentRowIdx === null || !rawEditData) return;
 
@@ -1530,25 +1577,51 @@ function addKeyToSection(sectionPath) {
         if (!table) return;
 
         const fieldPath = `${sectionPath}.${key}`;
+        const specialInfo = SPECIAL_KEY_TYPES[key];
         const tr = document.createElement('tr');
         tr.dataset.key = key;
         tr.className = 'new-key-row';
-        tr.innerHTML = `
-            <th style="background-color:#757575;color:white;">
-                ${escapeHtml(key)}
-                <button class="btn-delete-key" onclick="deleteKeyFromSection('${sectionPath}', '${escapeHtml(key)}')" title="키 삭제">×</button>
-            </th>
-            <td class="editable-value" data-field="${escapeHtml(fieldPath)}" data-editing="true" contenteditable="true" style="background-color:#E8F5E9;"></td>
-        `;
 
-        table.appendChild(tr);
-        addedKeys.set(fieldPath, '');
-        originalTypeMap[fieldPath] = 'string';
+        if (specialInfo) {
+            const origType = specialInfo.type === 'dict' ? 'dict' : 'array';
+            const allowedAttr = specialInfo.allowedTypes ? ` data-allowed-types="${specialInfo.allowedTypes.join(',')}"` : '';
+            const rows = Math.max(specialInfo.template.split('\n').length, 4);
+            tr.innerHTML = `
+                <th style="background-color:#757575;color:white;">
+                    ${escapeHtml(key)}
+                    <span class="special-key-badge">${escapeHtml(specialInfo.label)}</span>
+                    <button class="btn-delete-key" onclick="deleteKeyFromSection('${sectionPath}', '${escapeHtml(key)}')" title="키 삭제">×</button>
+                </th>
+                <td class="editable-value" data-field="${escapeHtml(fieldPath)}" data-editing="true" data-use-textarea="true" style="background-color:#E8F5E9;">
+                    <textarea class="inline-edit-ta" data-original-type="${origType}"${allowedAttr} rows="${rows}">${escapeHtml(specialInfo.template)}</textarea>
+                </td>
+            `;
+            addedKeys.set(fieldPath, '');
+            originalTypeMap[fieldPath] = origType;
 
-        const td = tr.querySelector('td');
-        if (td) td.focus();
+            table.appendChild(tr);
+            const ta = tr.querySelector('.inline-edit-ta');
+            if (ta) {
+                attachJsonValidator(ta);
+                ta.focus();
+            }
+        } else {
+            tr.innerHTML = `
+                <th style="background-color:#757575;color:white;">
+                    ${escapeHtml(key)}
+                    <button class="btn-delete-key" onclick="deleteKeyFromSection('${sectionPath}', '${escapeHtml(key)}')" title="키 삭제">×</button>
+                </th>
+                <td class="editable-value" data-field="${escapeHtml(fieldPath)}" data-editing="true" contenteditable="true" style="background-color:#E8F5E9;"></td>
+            `;
+            addedKeys.set(fieldPath, '');
+            originalTypeMap[fieldPath] = 'string';
 
-        showToast(`'${key}' 키가 추가되었습니다.`, 'success');
+            table.appendChild(tr);
+            const td = tr.querySelector('td');
+            if (td) td.focus();
+        }
+
+        showToast(`'${key}' 키가 추가되었습니다.${specialInfo ? ` (타입: ${specialInfo.label})` : ''}`, 'success');
     });
 }
 
@@ -1654,8 +1727,11 @@ function collectInlineChanges() {
                 }
                 const newType = classifyValueType(value);
                 if (origType !== newType) {
-                    value = getNestedValue(rawEditData, field);
-                    return;
+                    const allowed = getAllowedTypesForField(field);
+                    if (!allowed || !allowed.includes(newType)) {
+                        value = getNestedValue(rawEditData, field);
+                        return;
+                    }
                 }
             } else {
                 try { value = JSON.parse(text); } catch { value = text; }

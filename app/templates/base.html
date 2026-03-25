@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', function() {
         border-radius: 4px;
     }
 
-    /* ── 매칭 테이블 ── */
+    /* ── 매칭 테이블 (레거시) ── */
     table.match-table {
         width: 100%;
         border-collapse: collapse;
@@ -265,6 +265,63 @@ document.addEventListener('DOMContentLoaded', function() {
         padding: 10px;
         width: 50%;
         vertical-align: top;
+    }
+
+    /* ── 매칭 테이블 (다중 컬럼) ── */
+    table.match-table-multi {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin: 10px 0;
+    }
+    table.match-table-multi thead th.match-col-header {
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #555;
+        text-align: center;
+        border-bottom: 2px solid #ccc;
+    }
+    table.match-table-multi thead th.match-connector-header {
+        padding: 0;
+        border: none;
+    }
+    table.match-table-multi td.match-cell {
+        padding: 10px 14px;
+        border: 2px solid;
+        border-radius: 8px;
+        text-align: center;
+        vertical-align: middle;
+        font-size: 14px;
+        font-weight: 500;
+        margin: 4px;
+    }
+    table.match-table-multi td.match-connector {
+        text-align: center;
+        vertical-align: middle;
+        padding: 0 4px;
+        border: none;
+        color: #999;
+        font-size: 13px;
+        letter-spacing: 1px;
+    }
+    table.match-table-multi td.match-connector .match-arrow {
+        display: inline-block;
+        color: #BDBDBD;
+        font-weight: 700;
+    }
+    table.match-table-multi .match-idx {
+        display: inline-block;
+        font-size: 11px;
+        color: #888;
+        margin-right: 6px;
+        font-weight: 600;
+    }
+    table.match-table-multi tbody tr {
+        height: 48px;
+    }
+    table.match-table-multi tbody tr + tr td {
+        padding-top: 6px;
     }
 
     /* ── 상세 정보 테이블 ── */

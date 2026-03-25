@@ -198,13 +198,30 @@ def _render_image_tag(
     return f'<div class="error-msg">⚠️ 이미지 파일 찾을 수 없음: {fname}</div>'
 
 
+MATCH_COLUMN_COLORS = [
+    {"bg": "#EDE7F6", "border": "#B39DDB"},  # 보라
+    {"bg": "#FCE4EC", "border": "#F48FB1"},  # 분홍
+    {"bg": "#E3F2FD", "border": "#90CAF9"},  # 파랑
+    {"bg": "#FFF8E1", "border": "#FFD54F"},  # 노랑
+]
+
+MATCH_ROW_CONNECTORS = ["•", "•", "•"]
+
+
 def render_match_table(
     raw_val: Any,
     content_meta: dict[str, Any] | None,
     comparison: dict[str, str],
     gcs_image_base_url: str | None = None,
 ) -> str:
-    """매칭 리스트([[left], [right]])를 테이블로 렌더링"""
+    """매칭 중첩리스트를 인덱스 기반 매칭 테이블로 렌더링
+
+    지원 구조:
+      - [[left], [right]]           — 2열 매칭
+      - [[col1], [col2], [col3]]    — 3열 매칭
+      - [[col1], [col2], [col3], [col4]] — 4열 매칭
+    각 내부 리스트의 같은 인덱스끼리 매칭됨을 시각적으로 표현한다.
+    """
     try:
         data = raw_val
         if isinstance(raw_val, str):
@@ -212,24 +229,63 @@ def render_match_table(
             if clean_val.startswith("[["):
                 data = json.loads(clean_val)
 
-        if isinstance(data, list) and len(data) >= 2:
-            left, right = data[0], data[1]
-            html = '<table class="match-table">'
+        if (
+            isinstance(data, list)
+            and len(data) >= 2
+            and all(isinstance(col, list) for col in data)
+        ):
+            num_cols = len(data)
+            max_rows = max(len(col) for col in data)
+            col_width_pct = int(90 / num_cols)
+            connector_width_pct = int(10 / max(num_cols - 1, 1))
 
-            for i in range(max(len(left), len(right))):
-                l_txt = left[i] if i < len(left) else ""
-                r_txt = right[i] if i < len(right) else ""
+            html = '<table class="match-table-multi">'
 
-                l_html = process_content_with_tags(
-                    l_txt, content_meta, comparison, gcs_image_base_url
+            # 헤더
+            html += "<thead><tr>"
+            for ci in range(num_cols):
+                colors = MATCH_COLUMN_COLORS[ci % len(MATCH_COLUMN_COLORS)]
+                html += (
+                    f'<th class="match-col-header" '
+                    f'style="width:{col_width_pct}%;background:{colors["bg"]};">'
+                    f"그룹 {ci + 1}</th>"
                 )
-                r_html = process_content_with_tags(
-                    r_txt, content_meta, comparison, gcs_image_base_url
-                )
+                if ci < num_cols - 1:
+                    html += (
+                        f'<th class="match-connector-header" '
+                        f'style="width:{connector_width_pct}%;"></th>'
+                    )
+            html += "</tr></thead>"
 
-                html += f"<tr><td>{l_html}</td><td>{r_html}</td></tr>"
+            # 본문
+            html += "<tbody>"
+            for ri in range(max_rows):
+                html += "<tr>"
+                for ci in range(num_cols):
+                    colors = MATCH_COLUMN_COLORS[ci % len(MATCH_COLUMN_COLORS)]
+                    cell_val = data[ci][ri] if ri < len(data[ci]) else ""
+                    cell_html = process_content_with_tags(
+                        str(cell_val), content_meta, comparison, gcs_image_base_url
+                    )
+                    html += (
+                        f'<td class="match-cell" '
+                        f'style="background:{colors["bg"]};'
+                        f'border-color:{colors["border"]};">'
+                        f'<span class="match-idx">({ri + 1})</span>'
+                        f"{cell_html}</td>"
+                    )
+                    if ci < num_cols - 1:
+                        connector = MATCH_ROW_CONNECTORS[
+                            ci % len(MATCH_ROW_CONNECTORS)
+                        ]
+                        html += (
+                            f'<td class="match-connector">'
+                            f'<span class="match-arrow">{connector} ─ {connector}</span>'
+                            f"</td>"
+                        )
+                html += "</tr>"
 
-            html += "</table>"
+            html += "</tbody></table>"
             return html
     except Exception:
         pass
@@ -584,7 +640,9 @@ def render_item_card(
                     html += f"<div><strong>{escape_html(ok)}</strong> {rendered}</div>"
             elif k == "보기":
                 html += render_bogi(v, meta, comparison, gcs_image_base_url)
-            elif isinstance(v, (list, str)) and "[[" in str(v):
+            elif k == "매칭항목" or (
+                isinstance(v, (list, str)) and "[[" in str(v)
+            ):
                 html += render_match_table(
                     v, meta, comparison, gcs_image_base_url
                 )
