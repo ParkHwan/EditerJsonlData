@@ -149,9 +149,14 @@ class GCSEditService:
         items: list[dict[str, Any]] = []
         for idx_str in sorted(all_rows.keys(), key=int):
             row = json.loads(all_rows[idx_str])
+            add_info = row.get("add_info")
+            pair_idx = ""
+            if isinstance(add_info, dict):
+                pair_idx = add_info.get("pairIDX", "")
             items.append({
                 "row_idx": int(idx_str),
                 "data_id": row.get("data_id", f"row_{idx_str}"),
+                "pair_idx": pair_idx,
             })
         return items
 
