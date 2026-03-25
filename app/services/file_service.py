@@ -159,9 +159,14 @@ class FileService:
                 line = await f.readline()
                 try:
                     data = json.loads(line.decode("utf-8").strip())
+                    add_info = data.get("add_info")
+                    pair_idx = ""
+                    if isinstance(add_info, dict):
+                        pair_idx = add_info.get("pairIDX", "")
                     result.append({
                         "row_idx": i,
                         "data_id": data.get("data_id", f"Row_{i}"),
+                        "pair_idx": pair_idx,
                     })
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     result.append({

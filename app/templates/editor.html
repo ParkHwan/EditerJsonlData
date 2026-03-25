@@ -649,13 +649,18 @@ td.editable-value[contenteditable="true"] {
             <div class="sidebar-meta">총 {{ total_items }}개 항목</div>
         </div>
         <div class="sidebar-search">
-            <input type="text" id="sidebarSearch" placeholder="data_id 검색..." oninput="filterSidebar(this.value)">
+            <input type="text" id="sidebarSearch" placeholder="data_id 또는 pairIDX 검색..." oninput="filterSidebar(this.value)">
         </div>
         <ul class="sidebar-list" id="sidebarList">
             {% for item in data_id_list %}
-            <li class="sidebar-item" data-row-idx="{{ item.row_idx }}" data-data-id="{{ item.data_id }}">
+            <li class="sidebar-item" data-row-idx="{{ item.row_idx }}" data-data-id="{{ item.data_id }}" data-pair-idx="{{ item.pair_idx | default('') }}">
                 <span class="sid-idx">{{ item.row_idx + 1 }}</span>
-                <span class="sid-id" title="{{ item.data_id }}">{{ item.data_id }}</span>
+                <div>
+                    <span class="sid-id" title="{{ item.data_id }}">{{ item.data_id }}</span>
+                    {% if item.pair_idx %}
+                    <div style="font-size:10px;color:#9e9e9e;margin-top:2px;font-family:'JetBrains Mono',monospace;">pair: ...{{ item.pair_idx[-6:] }}</div>
+                    {% endif %}
+                </div>
             </li>
             {% endfor %}
         </ul>
@@ -729,6 +734,17 @@ let isFileLockedByMe = false;
 const deletedKeys = new Set();
 const addedKeys = new Map();
 const reorderedSections = new Map();
+
+const modifiedLists = new Set();
+
+const TASK3_LIST_SCHEMAS = {
+    "add_info.논제.문항.질문": { fields: ["번호", "본문", "배점"], label: "질문" },
+    "add_info.논제분석.예시답안.문항_질문": { fields: ["번호", "답안"], label: "예시답안" },
+    "add_info.논제분석.평가기준.문항_질문": { fields: ["번호", "내용"], label: "평가기준" },
+    "add_info.학생답안.문항_질문": { fields: ["번호", "답안"], label: "학생답안" },
+    "add_info.교사첨삭.평가": { fields: ["평가유형","문항_질문_번호","항목","유형","기준","결과","내용","원본기준"], label: "평가" },
+    "add_info.교사첨삭.세부첨삭": { fields: ["문항_질문_번호","원본","유형","내용","첨삭본문이미지"], label: "세부첨삭" },
+};
 
 // ── 파일 Lock 상태 UI 업데이트 ──
 function updateFileLockUI() {
@@ -925,8 +941,9 @@ function filterSidebar(query) {
     const items = document.querySelectorAll('.sidebar-item');
     const q = query.toLowerCase();
     items.forEach(item => {
-        const dataId = item.dataset.dataId.toLowerCase();
-        item.style.display = dataId.includes(q) ? '' : 'none';
+        const dataId = (item.dataset.dataId || '').toLowerCase();
+        const pairIdx = (item.dataset.pairIdx || '').toLowerCase();
+        item.style.display = (dataId.includes(q) || pairIdx.includes(q)) ? '' : 'none';
     });
 }
 
@@ -1153,6 +1170,11 @@ function enterInlineEdit(card) {
     card.querySelectorAll('.btn-delete-key').forEach(b => b.style.display = '');
     card.querySelectorAll('.move-key-wrap').forEach(w => w.style.display = 'inline-flex');
 
+    card.querySelectorAll('.btn-list-add').forEach(b => b.style.display = 'inline-block');
+    card.querySelectorAll('.btn-list-delete').forEach(b => b.style.display = 'inline-block');
+    card.querySelectorAll('.btn-list-move').forEach(b => b.style.display = 'inline-block');
+    modifiedLists.clear();
+
     const actions = card.querySelector('.header-actions');
     actions.dataset.originalHtml = actions.innerHTML;
     actions.innerHTML = `
@@ -1190,8 +1212,10 @@ function setNestedValue(obj, path, value) {
     const parts = path.split('.');
     let current = obj;
     for (let i = 0; i < parts.length - 1; i++) {
+        const nextKey = parts[i + 1];
+        const isNextNumeric = /^\d+$/.test(nextKey);
         if (!current[parts[i]] || typeof current[parts[i]] !== 'object') {
-            current[parts[i]] = {};
+            current[parts[i]] = isNextNumeric ? [] : {};
         }
         current = current[parts[i]];
     }
@@ -1200,7 +1224,18 @@ function setNestedValue(obj, path, value) {
 
 function deepMerge(target, source) {
     for (const key of Object.keys(source)) {
-        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key]) &&
+        if (Array.isArray(source[key]) && Array.isArray(target[key])) {
+            for (let i = 0; i < source[key].length; i++) {
+                if (source[key][i] === undefined) continue;
+                if (i < target[key].length &&
+                    source[key][i] && typeof source[key][i] === 'object' &&
+                    target[key][i] && typeof target[key][i] === 'object') {
+                    deepMerge(target[key][i], source[key][i]);
+                } else {
+                    target[key][i] = source[key][i];
+                }
+            }
+        } else if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key]) &&
             target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])) {
             deepMerge(target[key], source[key]);
         } else {
@@ -1535,6 +1570,170 @@ function trackSectionOrder(sectionPath, sectionBlock) {
 }
 
 // ══════════════════════════════════════════════
+//  Task 3: 섹션 토글 / 리스트 항목 조작
+// ══════════════════════════════════════════════
+function toggleSection(header) {
+    const body = header.nextElementSibling;
+    const icon = header.querySelector('.toggle-icon');
+    if (body) {
+        const isHidden = body.style.display === 'none';
+        body.style.display = isHidden ? 'block' : 'none';
+        if (icon) icon.textContent = isHidden ? '▼' : '▶';
+        header.style.opacity = isHidden ? '1' : '0.7';
+    }
+}
+
+function addListItem(listPath) {
+    if (currentRowIdx === null || !rawEditData) return;
+    const schema = TASK3_LIST_SCHEMAS[listPath];
+    if (!schema) return;
+
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return;
+    const container = card.querySelector(`[data-list-path="${CSS.escape(listPath)}"]`);
+    if (!container) return;
+
+    const existingCards = container.querySelectorAll('.list-item-card:not(.pending-delete)');
+    const newIdx = existingCards.length;
+
+    const div = document.createElement('div');
+    div.className = 'list-item-card theme-green';
+    div.dataset.listIdx = 'new';
+
+    let headerHtml = `<div class="list-item-header">
+        <span class="list-item-idx" style="background:#4caf50;color:#fff">${newIdx + 1}</span>
+        ${escapeHtml(schema.label)} [new]
+        <button class="btn-list-delete" style="display:inline-block" onclick="deleteListItem('${escapeHtml(listPath)}', -1, this)">×</button>
+    </div>`;
+
+    let bodyHtml = '<table class="info-table">';
+    schema.fields.forEach(key => {
+        const fieldPath = `${listPath}.${newIdx}.${key}`;
+        bodyHtml += `<tr><th>${escapeHtml(key)}</th>
+            <td class="editable-value" data-field="${escapeHtml(fieldPath)}"
+                data-editing="true" contenteditable="true"
+                style="white-space:pre-wrap;background:#E8F5E9;"></td></tr>`;
+        originalTypeMap[fieldPath] = 'string';
+    });
+    bodyHtml += '</table>';
+
+    div.innerHTML = headerHtml + bodyHtml;
+    const addBtn = container.querySelector('.btn-list-add');
+    container.insertBefore(div, addBtn);
+    modifiedLists.add(listPath);
+    showToast(`${schema.label} 항목이 추가되었습니다.`, 'success');
+}
+
+function deleteListItem(listPath, index, btnEl) {
+    if (currentRowIdx === null) return;
+    if (!confirm('이 항목을 삭제하시겠습니까? 저장 시 반영됩니다.')) return;
+
+    let itemCard;
+    if (btnEl) {
+        itemCard = btnEl.closest('.list-item-card');
+    } else {
+        const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+        if (!card) return;
+        const container = card.querySelector(`[data-list-path="${CSS.escape(listPath)}"]`);
+        if (!container) return;
+        const cards = container.querySelectorAll('.list-item-card');
+        if (index >= 0 && index < cards.length) itemCard = cards[index];
+    }
+
+    if (itemCard) {
+        itemCard.style.display = 'none';
+        itemCard.classList.add('pending-delete');
+        modifiedLists.add(listPath);
+        showToast('항목이 삭제 예정입니다. 저장 시 반영됩니다.', 'info');
+    }
+}
+
+function moveListItem(listPath, index, direction) {
+    if (currentRowIdx === null) return;
+    const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
+    if (!card) return;
+    const container = card.querySelector(`[data-list-path="${CSS.escape(listPath)}"]`);
+    if (!container) return;
+
+    const visibleCards = [...container.querySelectorAll('.list-item-card:not(.pending-delete)')];
+    const currentCard = visibleCards[index];
+    if (!currentCard) return;
+
+    if (direction === 'up' && index > 0) {
+        container.insertBefore(currentCard, visibleCards[index - 1]);
+    } else if (direction === 'down' && index < visibleCards.length - 1) {
+        const ref = visibleCards[index + 1].nextSibling;
+        container.insertBefore(currentCard, ref);
+    } else {
+        return;
+    }
+
+    modifiedLists.add(listPath);
+    _renumberListItems(container);
+}
+
+function _renumberListItems(container) {
+    const cards = container.querySelectorAll('.list-item-card:not(.pending-delete)');
+    cards.forEach((c, i) => {
+        const idxEl = c.querySelector('.list-item-idx');
+        if (idxEl) idxEl.textContent = String(i + 1);
+    });
+}
+
+function _rebuildListFromDOM(card, listPath) {
+    const container = card.querySelector(`[data-list-path="${CSS.escape(listPath)}"]`);
+    if (!container) return null;
+    const schema = TASK3_LIST_SCHEMAS[listPath];
+    if (!schema) return null;
+
+    const itemCards = container.querySelectorAll('.list-item-card:not(.pending-delete)');
+    const result = [];
+
+    itemCards.forEach(itemCard => {
+        const origIdx = itemCard.dataset.listIdx;
+        let obj = {};
+
+        if (origIdx !== undefined && origIdx !== 'new') {
+            const origItem = getNestedValue(rawEditData, `${listPath}.${origIdx}`);
+            if (origItem && typeof origItem === 'object') {
+                obj = JSON.parse(JSON.stringify(origItem));
+            }
+        }
+
+        const fields = itemCard.querySelectorAll('[data-field]');
+        fields.forEach(field => {
+            const fullPath = field.dataset.field;
+            const pathParts = fullPath.split('.');
+            const fieldKey = pathParts[pathParts.length - 1];
+
+            let value;
+            if (field.dataset.editing === 'true') {
+                if (field.dataset.useTextarea === 'true') {
+                    const ta = field.querySelector('.inline-edit-ta');
+                    const text = ta ? ta.value.trim() : '';
+                    try { value = JSON.parse(text); } catch { value = text; }
+                } else {
+                    value = field.textContent.trim();
+                    if (field.dataset.hasEscapes === 'true') {
+                        value = unescapeEditValue(value);
+                    }
+                }
+            } else {
+                value = getNestedValue(rawEditData, fullPath);
+            }
+
+            if (value !== undefined) {
+                obj[fieldKey] = value;
+            }
+        });
+
+        result.push(obj);
+    });
+
+    return result;
+}
+
+// ══════════════════════════════════════════════
 //  키 추가 / 삭제
 // ══════════════════════════════════════════════
 const SPECIAL_KEY_TYPES = {
@@ -1806,6 +2005,14 @@ function collectInlineChanges() {
         }
     }
 
+    for (const listPath of modifiedLists) {
+        const rebuilt = _rebuildListFromDOM(card, listPath);
+        if (rebuilt !== null) {
+            modifiedTopKeys.add(listPath.split('.')[0]);
+            setNestedValue(changes, listPath, rebuilt);
+        }
+    }
+
     return changes;
 }
 
@@ -1897,6 +2104,12 @@ async function cancelEdit() {
             row.remove();
         });
 
+        if (modifiedLists.size > 0) {
+            selectItem(selectedRowIdx, true);
+            modifiedLists.clear();
+            return;
+        }
+
         for (const [sectionPath] of reorderedSections) {
             const sectionBlock = card.querySelector(`[data-section="${sectionPath}"]`);
             if (!sectionBlock) continue;
@@ -1914,6 +2127,10 @@ async function cancelEdit() {
         card.querySelectorAll('.btn-add-key').forEach(b => b.style.display = 'none');
         card.querySelectorAll('.btn-delete-key').forEach(b => b.style.display = 'none');
         card.querySelectorAll('.move-key-wrap').forEach(w => w.style.display = 'none');
+
+        card.querySelectorAll('.btn-list-add').forEach(b => b.style.display = 'none');
+        card.querySelectorAll('.btn-list-delete').forEach(b => b.style.display = 'none');
+        card.querySelectorAll('.btn-list-move').forEach(b => b.style.display = 'none');
 
         card.classList.remove('inline-editing');
         const status = card.querySelector('.inline-edit-status');
@@ -1946,6 +2163,7 @@ async function exitInlineEdit() {
     deletedKeys.clear();
     addedKeys.clear();
     reorderedSections.clear();
+    modifiedLists.clear();
 }
 
 // ══════════════════════════════════════════════
