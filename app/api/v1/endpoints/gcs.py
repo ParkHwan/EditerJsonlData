@@ -66,6 +66,7 @@ class GCSUploadRequest(BaseModel):
 async def _background_folder_sync(task: str) -> None:
     """GCS → DuckDB 폴더/파일 동기화 (백그라운드 태스크)"""
     try:
+        await gcs_service.invalidate_cache()
         gcs_folders = await gcs_service.list_date_folders(task_id=task)
         for folder in gcs_folders:
             gcs_files = await gcs_service.list_files(folder["name"], task_id=task)
@@ -102,7 +103,11 @@ async def gcs_sync(
         raise HTTPException(status_code=400, detail="유효한 task 파라미터가 필요합니다")
 
     cleared = await metadata_service.clear_sync_record(task)
-    logger.info("Sync record cleared: task=%s rows=%d by %s", task, cleared, caller)
+    invalidated = await gcs_service.invalidate_cache()
+    logger.info(
+        "Sync record cleared: task=%s rows=%d cache_keys=%d by %s",
+        task, cleared, invalidated, caller,
+    )
 
     total_folders = 0
     total_files = 0
