@@ -746,6 +746,12 @@ const TASK3_LIST_SCHEMAS = {
     "add_info.교사첨삭.세부첨삭": { fields: ["문항_질문_번호","원본","유형","내용","첨삭본문이미지"], label: "세부첨삭" },
 };
 
+const TASK2_LIST_SCHEMAS = {
+    "add_info.교사첨삭.총평가": { fields: ["항목", "유형", "내용"], label: "총평가" },
+    "add_info.교사첨삭.세부평가": { fields: ["항목", "기준", "결과", "원본기준"], label: "세부평가" },
+    "add_info.교사첨삭.세부첨삭": { fields: ["원본", "유형", "내용"], label: "세부첨삭" },
+};
+
 // ── 파일 Lock 상태 UI 업데이트 ──
 function updateFileLockUI() {
     const banner = document.getElementById('fileLockBanner');
@@ -1599,7 +1605,7 @@ function toggleSection(header) {
 
 function addListItem(listPath) {
     if (currentRowIdx === null || !rawEditData) return;
-    const schema = TASK3_LIST_SCHEMAS[listPath];
+    const schema = TASK3_LIST_SCHEMAS[listPath] || TASK2_LIST_SCHEMAS[listPath];
     if (!schema) return;
 
     const card = document.querySelector(`.item[data-row-idx="${currentRowIdx}"]`);
@@ -1697,7 +1703,7 @@ function _renumberListItems(container) {
 function _rebuildListFromDOM(card, listPath) {
     const container = card.querySelector(`[data-list-path="${CSS.escape(listPath)}"]`);
     if (!container) return null;
-    const schema = TASK3_LIST_SCHEMAS[listPath];
+    const schema = TASK3_LIST_SCHEMAS[listPath] || TASK2_LIST_SCHEMAS[listPath];
     if (!schema) return null;
 
     const itemCards = container.querySelectorAll('.list-item-card:not(.pending-delete)');

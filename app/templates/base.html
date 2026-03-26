@@ -624,6 +624,10 @@ document.addEventListener('DOMContentLoaded', function() {
     .theme-purple .list-item-idx { background: #7b1fa2; color: #fff; }
     .theme-purple .info-table th { background: #ede7f6; color: #4527a0; }
 
+    .theme-teal .list-item-header { background: #e0f2f1; color: #00695c; }
+    .theme-teal .list-item-idx { background: #009688; color: #fff; }
+    .theme-teal .info-table th { background: #e0f2f1; color: #00695c; }
+
     .theme-amber .list-item-header { background: #fff8e1; color: #f57f17; }
     .theme-amber .list-item-idx { background: #ffa000; color: #fff; }
     .theme-amber .info-table th { background: #fff8e1; color: #f57f17; }
@@ -641,6 +645,18 @@ document.addEventListener('DOMContentLoaded', function() {
     .sentiment-badge.negative { background: #ffebee; color: #c62828; }
     .sentiment-badge.neutral { background: #fff8e1; color: #f57f17; }
     .detail-edit-type { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; background: #fff3e0; color: #e65100; }
+
+    /* ── Task 2 세부평가 등급 배지 ── */
+    .eval-grade {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 50%;
+        font-size: 12px; font-weight: 700; border: 2px solid;
+    }
+    .eval-grade.A { background: #e8f5e9; color: #2e7d32; border-color: #4caf50; }
+    .eval-grade.B { background: #e3f2fd; color: #1565c0; border-color: #42a5f5; }
+    .eval-grade.C { background: #fff3e0; color: #e65100; border-color: #ff9800; }
+    .eval-grade.D { background: #ffebee; color: #c62828; border-color: #ef5350; }
+    .eval-grade.E { background: #fafafa; color: #616161; border-color: #bdbdbd; }
 
     /* ── 리스트 조작 버튼 (편집 모드에서만 표시) ── */
     .btn-list-add {
