@@ -201,7 +201,67 @@ Manual GCS sync completed: task=task3 folders=1 files=0
 
 ---
 
-## 4. 수정 파일 요약
+## 4. LaTeX 편집모드 백슬래시 이중 이스케이프 버그 수정 (BUG-29)
+
+### 4.1 증상
+
+편집모드에서 수정 없이 저장 버튼 클릭 시:
+1. LaTeX 명령어의 백슬래시가 이중 이스케이프됨 (`\frac` → `\\frac`, `\therefore` → `\\therefore`)
+2. `\neq` → `\[줄바꿈]eq`, `\therefore` → `\[탭]herefore`, `\right` → `\[CR]ight`로 잘못 변환
+3. 실제 변경사항 없는데도 저장 확인 다이얼로그에 변경사항 표시됨
+
+### 4.2 원인 (3단계)
+
+**원인 1**: `data-has-escapes` 플래그가 `\n`/`\t`/`\r`만 감지하고 백슬래시(`\`)를 미감지
+- 편집 진입 시 모든 `\`를 `\\`로 표시하지만, `data-has-escapes` 미설정
+- 저장 시 `unescapeEditValue()` 미호출 → `\\`이 그대로 저장되어 이중 이스케이프
+
+**원인 2**: `unescapeEditValue()` 함수의 순차 치환 방식이 LaTeX 명령어를 파괴
+- `\\neq` (표시값) → `.replace(/\\n/g, '\n')` → `\[줄바꿈]eq` (잘못된 변환)
+- `\\therefore` → `.replace(/\\t/g, '\t')` → `\[탭]herefore`
+- `\\right` → `.replace(/\\r/g, '\r')` → `\[CR]ight`
+- **근본 원인**: 순차 치환 시 `\\n`에서 `\n`이 먼저 매칭되어 `\\`가 아닌 `\n`으로 소비됨
+
+**원인 3**: `contenteditable` 요소의 escape→unescape 라운드트립 미세 차이
+- 브라우저의 텍스트 정규화(공백 정규화, `\u00A0` 치환 등)
+- `.trim()`에 의한 원본 후행 공백 소실
+- 수정 없이 저장해도 거짓 양성 변경 감지
+
+### 4.3 수정
+
+| 수정 | 내용 | 파일 위치 |
+|---|---|---|
+| **hasEscapes 조건 확장** | `/[\n\t\r]/` → `/[\\\n\t\r]/` (백슬래시 포함) | `editor.html` enterInlineEdit, content_meta |
+| **단일 패스 unescapeEditValue** | 순차 `.replace()` → `/\\(\\|n|t|r)/g` 단일 패스 정규식. 정규식 엔진이 왼쪽부터 소비하므로 `\\neq`에서 `\\`가 먼저 매칭 → `\` + `neq`로 올바르게 복원 | `editor.html` unescapeEditValue() |
+| **originalDisplay 비교 방식** | 편집 진입 시 `el.dataset.originalDisplay = el.textContent`로 브라우저 기준값 저장. 저장 시 현재 textContent와 비교하여 동일하면 원본 raw 값 그대로 사용 (unescape 라운드트립 회피) | `editor.html` enterInlineEdit, content_meta, validateAllChanges, collectInlineChanges |
+
+### 4.4 단일 패스 정규식 동작 원리
+
+```
+정규식: /\\(\\|n|t|r)/g
+매칭 우선순위: \\ > \n > \t > \r (왼쪽부터 소비)
+
+\\neq → \\ 먼저 매칭 → \ + neq = \neq ✓
+\\therefore → \\ 먼저 매칭 → \ + therefore = \therefore ✓
+\\right → \\ 먼저 매칭 → \ + right = \right ✓
+\n (표시된 줄바꿈) → \n 매칭 → 줄바꿈 문자 ✓
+```
+
+### 4.5 originalDisplay 비교 흐름
+
+```
+편집 진입:
+  원본 raw값 → escape → el.textContent 설정 → dataset.originalDisplay 저장
+
+저장 시:
+  textContent.trim() === originalDisplay.trim() ?
+    → YES: 원본 raw값 그대로 사용 (변경 없음)
+    → NO:  사용자가 실제 수정 → unescapeEditValue() 적용
+```
+
+---
+
+## 5. 수정 파일 요약
 
 | 파일 | 변경 내용 | 변경 규모 |
 |---|---|---|
@@ -211,11 +271,12 @@ Manual GCS sync completed: task=task3 folders=1 files=0
 | `app/services/file_service.py` | pairIDX 추출 | +5줄 |
 | `app/services/gcs_edit_service.py` | pairIDX 추출 | +5줄 |
 | `app/api/v1/endpoints/gcs.py` | GCS 캐시 무효화 추가 | +7줄 (수정) |
-| **합계** | | **+806줄, -9줄** |
+| `app/templates/editor.html` | BUG-29: hasEscapes 조건 확장 + unescapeEditValue 단일 패스 + originalDisplay 비교 | +20줄 (수정) |
+| **합계** | | **+826줄, -9줄** |
 
 ---
 
-## 5. 아키텍처 참고
+## 6. 아키텍처 참고
 
 ### Task 3 렌더링 분기 흐름
 
