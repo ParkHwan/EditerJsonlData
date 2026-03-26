@@ -1104,8 +1104,9 @@ function enterInlineEdit(card) {
                 .replace(/\t/g, '\\t')
                 .replace(/\r/g, '\\r');
             el.textContent = displayValue;
+            el.dataset.originalDisplay = el.textContent;
             el.contentEditable = 'true';
-            if (/[\n\t\r]/.test(rawValue)) {
+            if (/[\\\n\t\r]/.test(rawValue)) {
                 el.dataset.hasEscapes = 'true';
             }
         } else {
@@ -1152,7 +1153,7 @@ function enterInlineEdit(card) {
                 const metaDisplay = typeof v === 'string'
                     ? v.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/\r/g, '\\r')
                     : String(v);
-                const hasEsc = typeof v === 'string' && /[\n\t\r]/.test(v);
+                const hasEsc = typeof v === 'string' && /[\\\n\t\r]/.test(v);
                 metaHtml += `<tr>
                     <th style="background-color:#E65100;color:white;width:150px;">${escapeHtml(k)}</th>
                     <td class="editable-value" data-field="${escapeHtml(metaField)}" data-editing="true" contenteditable="true"${hasEsc ? ' data-has-escapes="true"' : ''}>${escapeHtml(metaDisplay)}</td>
@@ -1163,6 +1164,9 @@ function enterInlineEdit(card) {
         metaSection.innerHTML = metaHtml;
         card.appendChild(metaSection);
 
+        metaSection.querySelectorAll('[contenteditable="true"]').forEach(el => {
+            el.dataset.originalDisplay = el.textContent;
+        });
         metaSection.querySelectorAll('.inline-edit-ta').forEach(ta => attachJsonValidator(ta));
     }
 
@@ -1191,11 +1195,15 @@ function enterInlineEdit(card) {
 //  값 헬퍼 함수
 // ══════════════════════════════════════════════
 function unescapeEditValue(text) {
-    return text
-        .replace(/\\n/g, '\n')
-        .replace(/\\t/g, '\t')
-        .replace(/\\r/g, '\r')
-        .replace(/\\\\/g, '\\');
+    return text.replace(/\\(\\|n|t|r)/g, (_, ch) => {
+        switch (ch) {
+            case '\\': return '\\';
+            case 'n':  return '\n';
+            case 't':  return '\t';
+            case 'r':  return '\r';
+            default:   return _;
+        }
+    });
 }
 
 function getNestedValue(obj, path) {
@@ -1356,9 +1364,15 @@ function validateAllChanges() {
                 try { newValue = JSON.parse(text); } catch { newValue = text; }
             }
         } else {
-            newValue = el.textContent.trim();
-            if (el.dataset.hasEscapes === 'true') {
-                newValue = unescapeEditValue(newValue);
+            const currentText = el.textContent.trim();
+            if (el.dataset.originalDisplay !== undefined &&
+                currentText === el.dataset.originalDisplay.trim()) {
+                newValue = rawOriginal;
+            } else {
+                newValue = currentText;
+                if (el.dataset.hasEscapes === 'true') {
+                    newValue = unescapeEditValue(newValue);
+                }
             }
             if (!newValue && rawOriginal !== null && rawOriginal !== undefined && rawOriginal !== '') {
                 warnings.push({ field, msg: '값이 비어 있습니다 (원래 값 존재)' });
@@ -1936,9 +1950,15 @@ function collectInlineChanges() {
                 try { value = JSON.parse(text); } catch { value = text; }
             }
         } else {
-            value = el.textContent.trim();
-            if (el.dataset.hasEscapes === 'true') {
-                value = unescapeEditValue(value);
+            const currentText = el.textContent.trim();
+            if (el.dataset.originalDisplay !== undefined &&
+                currentText === el.dataset.originalDisplay.trim()) {
+                value = getNestedValue(rawEditData, field);
+            } else {
+                value = currentText;
+                if (el.dataset.hasEscapes === 'true') {
+                    value = unescapeEditValue(value);
+                }
             }
             if (origType === 'number') {
                 const num = Number(value);
