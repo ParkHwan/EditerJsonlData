@@ -20,12 +20,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi_csrf_protect import CsrfProtect
 from pydantic import BaseModel
 
-from app.api.deps import get_current_user, get_draft_service, get_lock_service, get_pending_tracker
+from app.api.deps import (
+    get_auth_service,
+    get_current_user,
+    get_draft_service,
+    get_lock_service,
+    get_pending_tracker,
+)
+from app.core.config import settings
 from app.core.logger import logger
 from app.core.pending_tasks import PendingTaskTracker
 from app.core.rate_limit import limiter
 from app.schemas.item import LockResponse
 from app.services.audit_service import audit_service
+from app.services.auth_service import AuthService
 from app.services.draft_service import DraftService
 from app.services.file_service import file_service
 from app.services.gcs_edit_service import gcs_edit_service
@@ -102,6 +110,42 @@ async def lock_heartbeat(
     user_id = current_user["user_id"]
     ttl = await lock_service.heartbeat(file_id, user_id)
     return LockResponse(success=True, message="Lock extended", remaining_seconds=ttl)
+
+
+@router.post("/lock/{file_id}/release-beacon")
+async def release_lock_beacon(
+    request: Request,
+    file_id: str,
+    lock_service: LockService = Depends(get_lock_service),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """브라우저 탭/창 닫힘 시 navigator.sendBeacon으로 호출되는 Lock 해제.
+
+    sendBeacon은 커스텀 헤더를 보낼 수 없으므로 CSRF 검증 없이
+    세션 쿠키만으로 인증한다.
+    """
+    session_id = request.cookies.get(settings.SESSION_COOKIE_NAME, "")
+    user = await auth_service.validate_session(session_id, request)
+    if not user:
+        return {"success": False, "message": "Unauthorized"}
+
+    user_id = user["user_id"]
+    await lock_service.release_lock(file_id, user_id)
+
+    await audit_service.log(
+        action="edit_end",
+        request=request,
+        user_id=user_id,
+        display_name=user.get("display_name", ""),
+        file_id=file_id,
+        metadata={"trigger": "beacon_unload"},
+    )
+
+    await ws_manager.broadcast(
+        file_id,
+        {"type": "lock_change", "action": "released", "user_id": user_id},
+    )
+    return {"success": True, "message": "Lock released via beacon"}
 
 
 @router.delete("/lock/{file_id}")

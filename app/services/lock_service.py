@@ -52,6 +52,12 @@ class LockService:
             await self.redis.delete(key)
             logger.info(f"File lock released: {key} by {user_id}")
 
+    async def release_lock_force(self, file_id: str) -> None:
+        """Lock 강제 해제 (stale lock 정리용). 소유자 확인 없이 삭제."""
+        key = self._get_key(file_id)
+        await self.redis.delete(key)
+        logger.info("File lock force-released: %s", key)
+
     async def check_lock(self, file_id: str) -> str | None:
         """파일 Lock 소유자 반환. 없으면 None."""
         key = self._get_key(file_id)

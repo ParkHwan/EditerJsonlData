@@ -21,10 +21,9 @@ JSON API:
 from __future__ import annotations
 
 import asyncio
+import hmac
 from pathlib import Path
 from typing import Any
-
-import hmac
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
@@ -33,7 +32,7 @@ from fastapi_csrf_protect import CsrfProtect
 from google.cloud.exceptions import GoogleCloudError, NotFound
 from pydantic import BaseModel
 
-from app.api.deps import get_current_user, get_optional_user
+from app.api.deps import get_current_user, get_lock_service, get_optional_user
 from app.core.config import settings
 from app.core.logger import logger
 from app.core.rate_limit import limiter
@@ -41,6 +40,7 @@ from app.services.audit_service import audit_service
 from app.services.file_service import file_service
 from app.services.gcs_edit_service import gcs_edit_service
 from app.services.gcs_service import gcs_service
+from app.services.lock_service import LockService
 from app.services.metadata_service import metadata_service
 
 router = APIRouter()
@@ -212,6 +212,7 @@ async def gcs_browse_date(
     task: str = "",
     csrf_protect: CsrfProtect = Depends(),
     current_user: dict[str, Any] | None = Depends(get_optional_user),
+    lock_service: LockService = Depends(get_lock_service),
 ):
     """특정 날짜 폴더 내 파일 목록 — DuckDB-first
 
@@ -267,6 +268,23 @@ async def gcs_browse_date(
 
     for f in files:
         f["is_local"] = f["name"] in local_file_names
+
+        fname = f.get("name", "")
+        fid = fname[:-6] if fname.endswith(".jsonl") else fname
+        lock_owner = await lock_service.check_lock(fid)
+        if lock_owner:
+            display = await metadata_service.get_display_name(
+                lock_owner
+            )
+            f["lock_owner"] = display or lock_owner
+            f["lock_owner_id"] = lock_owner
+            if f.get("status") in ("registered", "updated", "completed"):
+                f["status"] = "editing"
+        else:
+            f["lock_owner"] = ""
+            f["lock_owner_id"] = ""
+            if f.get("status") == "editing":
+                f["status"] = "updated" if f.get("update_count", 0) > 0 else "registered"
 
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     response = templates.TemplateResponse(
@@ -618,11 +636,16 @@ async def open_gcs_for_edit(
     body: GCSOpenRequest,
     csrf_protect: CsrfProtect = Depends(),
     current_user: dict[str, Any] = Depends(get_current_user),
+    lock_service: LockService = Depends(get_lock_service),
 ):
     """GCS JSONL을 Redis로 로드하여 편집 세션 시작 (로컬 다운로드 없음)
 
     기존 working copy가 Redis에 남아있으면 GCS에서 다시 로드하지 않고 재사용한다.
     (편집 종료 후 재진입 시 이전 수정사항 보존)
+
+    편집 진입 전 Redis lock을 확인하여:
+    - 다른 사용자가 활성 편집 중이면 409로 차단
+    - 비활성(stale) lock이면 자동 해제 후 진행
 
     Returns:
         file_id, total_rows, editor_url
@@ -633,6 +656,32 @@ async def open_gcs_for_edit(
     if not filename.endswith(".jsonl"):
         raise HTTPException(status_code=400, detail="JSONL 파일만 지원합니다.")
     file_id = filename[:-6]
+
+    user_id = current_user["user_id"]
+    lock_owner = await lock_service.check_lock(file_id)
+    if lock_owner and lock_owner != user_id:
+        from app.db.redis_client import get_redis_client
+
+        redis = await get_redis_client()
+        ttl = await redis.ttl(f"lock:{file_id}")
+        stale_threshold = LockService.LOCK_TTL - 120
+        if 0 < ttl < stale_threshold:
+            await lock_service.release_lock_force(file_id)
+            logger.info(
+                "Stale lock auto-released: %s (owner=%s, ttl=%d)",
+                file_id, lock_owner, ttl,
+            )
+        else:
+            owner_name = await metadata_service.get_display_name(
+                lock_owner
+            )
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{owner_name or lock_owner}님이 현재 편집 중입니다. "
+                    "편집이 완료될 때까지 기다려주세요."
+                ),
+            )
 
     resumed = False
     if await gcs_edit_service.is_loaded(file_id):

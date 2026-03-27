@@ -50,6 +50,9 @@
                         <span class="status-badge status-completed">완료</span>
                     {% elif f.status == 'editing' %}
                         <span class="status-badge status-editing">편집중</span>
+                        {% if f.lock_owner %}
+                            <span class="lock-owner-badge">🔒 {{ f.lock_owner }}</span>
+                        {% endif %}
                     {% elif f.status == 'updated' %}
                         <span class="status-badge status-updated">업데이트됨</span>
                     {% elif f.status == 'registered' %}
@@ -143,6 +146,11 @@
     .status-editing { background: #FFF3E0; color: #E65100; }
     .status-updated { background: #E3F2FD; color: #1565C0; }
     .status-completed { background: #E8F5E9; color: #2E7D32; }
+    .lock-owner-badge {
+        display: inline-block; margin-left: 4px; padding: 2px 6px;
+        border-radius: 4px; font-size: 11px; font-weight: 500;
+        background: #FCE4EC; color: #C62828;
+    }
 </style>
 {% endblock %}
 

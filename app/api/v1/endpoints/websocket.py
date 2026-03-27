@@ -11,6 +11,7 @@ from app.api.deps import get_auth_service, get_lock_service
 from app.core.config import settings
 from app.services.auth_service import AuthService
 from app.services.lock_service import LockService
+from app.services.metadata_service import metadata_service
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter()
@@ -38,6 +39,11 @@ async def lock_status_ws(
 
     try:
         lock_info = await lock_service.get_lock_info(file_id)
+        if lock_info:
+            display_name = await metadata_service.get_display_name(
+                lock_info["user_id"]
+            )
+            lock_info["display_name"] = display_name or lock_info["user_id"]
         await websocket.send_json({"type": "init", "lock": lock_info})
 
         while True:
