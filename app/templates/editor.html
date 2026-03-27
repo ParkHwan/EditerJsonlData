@@ -2399,6 +2399,7 @@ async function discardWorkingCopy() {
             fileLockOwner = null;
             if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
             if (lockStatusManager) { lockStatusManager.disconnect(); }
+            window.removeEventListener('beforeunload', _beforeUnloadGuard);
             showToast(data.message || '편집 세션 취소됨', 'success');
             const taskParam = GCS_TASK ? `?task=${GCS_TASK}` : '';
             const backUrl = GCS_DATE

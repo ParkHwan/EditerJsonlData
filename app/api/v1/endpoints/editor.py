@@ -367,7 +367,7 @@ async def discard_working_copy(
     gcs_path = meta["gcs_path"] if meta else ""
 
     await gcs_edit_service.discard(file_id)
-    await lock_service.release_lock(file_id, user_id)
+    await lock_service.release_lock_force(file_id)
     await draft_service.delete_all_drafts_for_file(file_id, user_id)
 
     await audit_service.log(

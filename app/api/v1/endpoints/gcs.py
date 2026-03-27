@@ -284,7 +284,16 @@ async def gcs_browse_date(
             f["lock_owner"] = ""
             f["lock_owner_id"] = ""
             if f.get("status") == "editing":
-                f["status"] = "updated" if f.get("update_count", 0) > 0 else "registered"
+                corrected = "updated" if f.get("update_count", 0) > 0 else "registered"
+                f["status"] = corrected
+                gcs_path = f.get("gcs_path", "")
+                if gcs_path:
+                    try:
+                        await metadata_service.update_file_status(
+                            gcs_path, status=corrected
+                        )
+                    except Exception:
+                        pass
 
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
     response = templates.TemplateResponse(
