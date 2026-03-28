@@ -241,6 +241,33 @@ def get_images_from_folder(
 # ---------------------------------------------------------------------------
 # content_meta 태그 렌더링
 # ---------------------------------------------------------------------------
+def _resolve_tags_in_html(
+    html_text: str,
+    content_meta: dict[str, Any] | None,
+    comparison: dict[str, str],
+    gcs_image_base_url: str | None = None,
+) -> str:
+    """HTML 문자열 내의 <tag_...> 참조를 content_meta의 이미지로 치환한다.
+
+    일반 HTML 태그(<table>, <tr> 등)는 보존하고,
+    content_meta에 키가 존재하는 tag_ 접두어 참조만 이미지로 변환한다.
+    """
+    if not content_meta:
+        return html_text
+
+    def _replace_tag(match: re.Match[str]) -> str:
+        tag_name = match.group(1)
+        if tag_name in content_meta:
+            meta_val = content_meta[tag_name]
+            if isinstance(meta_val, dict) and meta_val.get("file_name"):
+                return _render_image_tag(
+                    meta_val["file_name"], comparison, gcs_image_base_url,
+                )
+        return match.group(0)
+
+    return re.sub(r"<(tag_[A-Za-z0-9_]+)>", _replace_tag, html_text)
+
+
 def _render_image_tag(
     fname_val: Any,
     comparison: dict[str, str],
@@ -434,7 +461,10 @@ def render_meta_inline(
 
             if text_content:
                 if isinstance(text_content, str) and "<table" in text_content:
-                    html += f'<div class="meta-table-content">{text_content}</div>'
+                    resolved = _resolve_tags_in_html(
+                        text_content, content_meta, comparison, gcs_image_base_url,
+                    )
+                    html += f'<div class="meta-table-content">{resolved}</div>'
                 elif isinstance(text_content, (list, str)) and "[[" in str(text_content):
                     html += render_match_table(
                         text_content, content_meta, comparison, gcs_image_base_url

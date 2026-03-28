@@ -123,6 +123,21 @@ class MetadataService:
     async def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         return await asyncio.to_thread(self._get_user_by_email_sync, email)
 
+    def _get_display_name_sync(self, user_id: str) -> str | None:
+        cursor = DuckDBClient.get_read_cursor()
+        row = cursor.execute(
+            "SELECT display_name FROM users WHERE user_id = ?",
+            [user_id],
+        ).fetchone()
+        cursor.close()
+        return row[0] if row else None
+
+    async def get_display_name(self, user_id: str) -> str | None:
+        """user_id로 display_name 조회."""
+        return await asyncio.to_thread(
+            self._get_display_name_sync, user_id
+        )
+
     def _increment_login_count_sync(self, user_id: str) -> None:
         """로그인 횟수 증가 + 마지막 로그인 시각 갱신"""
         DuckDBClient.execute_write_many([

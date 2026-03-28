@@ -671,7 +671,7 @@ td.editable-value[contenteditable="true"] {
         <!-- 파일 Lock 상태 배너 -->
         <div class="file-lock-banner unlocked" id="fileLockBanner">
             <span id="fileLockText">🔒 편집 잠금 획득 중...</span>
-            <button class="btn-file-lock end" id="btnFileLock" onclick="releaseFileLock()" style="display:none;">🔓 편집 종료</button>
+            <button class="btn-file-lock end" id="btnFileLock" onclick="pauseEditing()" style="display:none;">⏸️ 편집 일시중단</button>
         </div>
 
         <div class="detail-placeholder" id="detailPlaceholder">
@@ -762,8 +762,8 @@ function updateFileLockUI() {
 
     if (isFileLockedByMe) {
         banner.classList.add('locked-by-me');
-        text.textContent = '🔒 편집 모드 — 편집이 완료되면 편집 종료를 눌러주세요.';
-        btn.textContent = '🔓 편집 종료';
+        text.textContent = '🔒 편집 모드 — 편집을 중단하려면 일시중단을 눌러주세요.';
+        btn.textContent = '⏸️ 편집 일시중단';
         btn.className = 'btn-file-lock end';
         btn.style.display = '';
         btn.disabled = false;
@@ -811,12 +811,12 @@ async function acquireFileLock() {
     }
 }
 
-async function releaseFileLock() {
+async function pauseEditing() {
     if (currentRowIdx !== null) {
         const doSave = confirm(
             '편집 중인 항목이 있습니다.\n\n'
-            + '확인 → 현재 변경사항을 저장 후 종료\n'
-            + '취소 → 변경사항 무시 후 종료'
+            + '확인 → 현재 변경사항을 저장 후 나가기\n'
+            + '취소 → 변경사항 무시 후 나가기'
         );
         if (doSave) {
             await saveEdit();
@@ -824,13 +824,6 @@ async function releaseFileLock() {
             await cancelEdit();
         }
     }
-
-    try {
-        await csrfFetch(`${API_V1_STR}/editor/lock/${FILE_ID}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' }
-        });
-    } catch (e) { /* silent */ }
 
     if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
@@ -840,8 +833,7 @@ async function releaseFileLock() {
         lockStatusManager.disconnect();
     }
 
-    isFileLockedByMe = false;
-    fileLockOwner = null;
+    window.removeEventListener('beforeunload', _beforeUnloadGuard);
 
     if (EDIT_MODE === 'gcs' && GCS_DATE) {
         const taskParam = GCS_TASK ? `?task=${GCS_TASK}` : '';
@@ -873,7 +865,7 @@ class LockStatusManager {
                 const data = JSON.parse(ev.data);
                 if (data.type === 'init') {
                     if (data.lock && data.lock.user_id) {
-                        fileLockOwner = data.lock.user_id;
+                        fileLockOwner = data.lock.display_name || data.lock.user_id;
                         isFileLockedByMe = (data.lock.user_id === this.currentUserId);
                         if (isFileLockedByMe && !heartbeatInterval) {
                             heartbeatInterval = setInterval(sendHeartbeat, 30000);
@@ -2407,6 +2399,7 @@ async function discardWorkingCopy() {
             fileLockOwner = null;
             if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
             if (lockStatusManager) { lockStatusManager.disconnect(); }
+            window.removeEventListener('beforeunload', _beforeUnloadGuard);
             showToast(data.message || '편집 세션 취소됨', 'success');
             const taskParam = GCS_TASK ? `?task=${GCS_TASK}` : '';
             const backUrl = GCS_DATE
@@ -2467,12 +2460,13 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-window.addEventListener('beforeunload', (e) => {
+function _beforeUnloadGuard(e) {
     if (currentRowIdx !== null || isFileLockedByMe) {
         e.preventDefault();
         e.returnValue = '';
     }
-});
+}
+window.addEventListener('beforeunload', _beforeUnloadGuard);
 
 window.addEventListener('unload', () => {
     if (isFileLockedByMe) {
