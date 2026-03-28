@@ -71,53 +71,8 @@ document.addEventListener('DOMContentLoaded', function() {
     {% block content %}{% endblock %}
 </div>
 
-<!-- 공통 JS -->
-<script>
-// ── CSRF 토큰 유틸리티 (Phase 3) ──
-function getCsrfToken() {
-    const meta = document.querySelector('meta[name="csrf-token"]');
-    return meta ? meta.getAttribute('content') : '';
-}
-
-// ── CSRF 헤더가 포함된 fetch 래퍼 ──
-function csrfFetch(url, options = {}) {
-    const csrfToken = getCsrfToken();
-    const headers = options.headers || {};
-
-    if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-    }
-
-    return fetch(url, {
-        ...options,
-        headers: headers,
-        credentials: 'same-origin'
-    });
-}
-
-// ── Toast 알림 ──
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.3s';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
-</script>
-
-<script>
-async function handleLogout() {
-    try {
-        await csrfFetch('/api/v1/auth/logout', { method: 'POST' });
-    } catch (e) { /* silent */ }
-    window.location.href = '/api/v1/view/login';
-}
-</script>
+<!-- 공통 JS (base.html에서 분리됨) -->
+<script src="/static/js/common.js"></script>
 
 {% block extra_js %}{% endblock %}
 </body>
