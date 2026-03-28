@@ -1,7 +1,7 @@
 /**
  * utils.js - 순수 유틸리티 함수 (DOM/상태 의존 없음)
  */
-import { SPECIAL_KEY_TYPES } from './schemas.js';
+import { SPECIAL_KEY_TYPES, CONTEXT_KEY_TYPES } from './schemas.js';
 
 export function escapeHtml(text) {
     return String(text)
@@ -9,6 +9,10 @@ export function escapeHtml(text) {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+}
+
+export function stripNewlineSymbol(text) {
+    return text.replace(/↵\n?/g, '\n');
 }
 
 export function unescapeEditValue(text) {
@@ -83,6 +87,9 @@ export function getFieldKeyName(fieldPath) {
 }
 
 export function getAllowedTypesForField(fieldPath) {
+    if (CONTEXT_KEY_TYPES[fieldPath]) {
+        return CONTEXT_KEY_TYPES[fieldPath].allowedTypes;
+    }
     const keyName = getFieldKeyName(fieldPath);
     const info = SPECIAL_KEY_TYPES[keyName];
     return info ? info.allowedTypes : null;

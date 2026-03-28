@@ -3,7 +3,7 @@
  */
 import { FILE_ID, API_V1_STR, GCS_DATE } from './config.js';
 import { state } from './state.js';
-import { showToast } from './api.js';
+import { showToast, fetchWithRetry } from './api.js';
 
 export function filterSidebar(query) {
     const q = (query || '').toLowerCase();
@@ -23,14 +23,23 @@ export async function selectItem(el, rowIdx, dataId) {
     document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
     if (el && el.classList) el.classList.add('active');
 
+    const placeholder = document.getElementById('detailPlaceholder');
+    const detailContent = document.getElementById('detailContent');
+    const pagination = document.getElementById('cardPagination');
+    const titleEl = document.getElementById('detailTitle');
+
+    if (placeholder) placeholder.style.display = 'none';
+    if (detailContent) detailContent.style.display = '';
+    if (pagination) pagination.style.display = '';
+    if (titleEl) titleEl.textContent = dataId || `#${rowIdx + 1}`;
+
     const container = document.getElementById('cardContainer');
     container.innerHTML = '<div class="loading-spinner">로딩 중...</div>';
 
     try {
-        const gcsParam = GCS_DATE ? `&gcs_date=${GCS_DATE}` : '';
-        const resp = await fetch(
-            `${API_V1_STR}/editor/card/${FILE_ID}?row_idx=${rowIdx}${gcsParam}`,
-            { credentials: 'same-origin' }
+        const gcsParam = GCS_DATE ? `?gcs_date=${GCS_DATE}` : '';
+        const resp = await fetchWithRetry(
+            `${API_V1_STR}/editor/card/${FILE_ID}/${rowIdx}${gcsParam}`
         );
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const html = await resp.text();

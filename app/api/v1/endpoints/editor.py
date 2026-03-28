@@ -183,7 +183,7 @@ async def release_lock(
 # Data Endpoints (GCS Redis / 로컬 자동 분기)
 # ---------------------------------------------------------------------------
 @router.get("/data/{file_id}/{row_idx}")
-@limiter.limit("100/minute")
+@limiter.limit("300/minute")
 async def get_data(
     request: Request,
     file_id: str,
@@ -401,7 +401,7 @@ async def discard_working_copy(
 # data_id 목록 + 단일 카드 렌더링
 # ---------------------------------------------------------------------------
 @router.get("/ids/{file_id}")
-@limiter.limit("100/minute")
+@limiter.limit("300/minute")
 async def get_data_id_list(
     request: Request,
     file_id: str,
@@ -418,7 +418,7 @@ async def get_data_id_list(
 
 
 @router.get("/card/{file_id}/{row_idx}")
-@limiter.limit("100/minute")
+@limiter.limit("300/minute")
 async def get_rendered_card(
     request: Request,
     file_id: str,

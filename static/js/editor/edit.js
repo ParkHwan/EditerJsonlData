@@ -3,9 +3,10 @@
  */
 import { FILE_ID, API_V1_STR } from './config.js';
 import { state } from './state.js';
-import { getNestedValue, classifyValueType, getAllowedTypesForField, escapeHtml } from './utils.js';
+import { getNestedValue, classifyValueType, getAllowedTypesForField, escapeHtml, stripNewlineSymbol } from './utils.js';
 import { attachJsonValidator } from './validate.js';
 import { checkDraft, startAutoSave } from './draft.js';
+import { fetchWithRetry } from './api.js';
 
 export async function startRowEdit(dataId, rowIdx) {
     if (state.currentRowIdx !== null) {
@@ -13,9 +14,7 @@ export async function startRowEdit(dataId, rowIdx) {
     }
 
     try {
-        const resp = await fetch(`${API_V1_STR}/editor/data/${FILE_ID}/${rowIdx}`, {
-            credentials: 'same-origin'
-        });
+        const resp = await fetchWithRetry(`${API_V1_STR}/editor/data/${FILE_ID}/${rowIdx}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
 
@@ -67,7 +66,8 @@ export function enterInlineEdit(card) {
             el.dataset.editing = 'true';
 
             const text = el.textContent;
-            if (typeof rawValue === 'string' && rawValue !== text) {
+            const cleanText = stripNewlineSymbol(text);
+            if (typeof rawValue === 'string' && rawValue !== cleanText) {
                 el.dataset.hasEscapes = 'true';
             }
             el.dataset.originalDisplay = text;
@@ -85,10 +85,7 @@ export function enterInlineEdit(card) {
                 <textarea class="inline-edit-ta" data-original-type="dict" rows="8">${escapeHtml(JSON.stringify(state.rawEditData.content_meta, null, 2))}</textarea>
             </div>
         `;
-        const header = card.querySelector('.header');
-        if (header && header.parentNode) {
-            header.parentNode.insertBefore(metaDiv, header.nextSibling);
-        }
+        card.appendChild(metaDiv);
         state.originalTypeMap['content_meta'] = 'dict';
         state.originalHtmlMap['content_meta'] = '';
         const ta = metaDiv.querySelector('.inline-edit-ta');

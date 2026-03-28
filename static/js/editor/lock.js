@@ -5,6 +5,8 @@ import { FILE_ID, API_V1_STR, CURRENT_USER_ID, EDIT_MODE, GCS_DATE, GCS_TASK } f
 import { state } from './state.js';
 import { csrfFetch, showToast } from './api.js';
 
+let _lockAcquiring = false;
+
 export function updateFileLockUI() {
     const banner = document.getElementById('fileLockBanner');
     const text = document.getElementById('fileLockText');
@@ -35,7 +37,8 @@ export function updateFileLockUI() {
 }
 
 export async function acquireFileLock() {
-    if (state.isFileLockedByMe) return;
+    if (state.isFileLockedByMe || _lockAcquiring) return;
+    _lockAcquiring = true;
 
     try {
         const resp = await csrfFetch(`${API_V1_STR}/editor/lock/${FILE_ID}`, {
@@ -47,6 +50,7 @@ export async function acquireFileLock() {
             window.location.href = `${API_V1_STR}/view/login`;
             return;
         }
+        if (resp.status === 429) return;
         if (!resp.ok) {
             const err = await resp.json();
             showToast(err.detail || '편집 잠금 실패', 'error');
@@ -57,9 +61,13 @@ export async function acquireFileLock() {
         state.fileLockOwner = CURRENT_USER_ID;
         updateFileLockUI();
 
-        state.heartbeatInterval = setInterval(sendHeartbeat, 30000);
+        if (!state.heartbeatInterval) {
+            state.heartbeatInterval = setInterval(sendHeartbeat, 30000);
+        }
     } catch (e) {
         showToast('편집 잠금 획득 실패: ' + e.message, 'error');
+    } finally {
+        _lockAcquiring = false;
     }
 }
 
@@ -111,6 +119,9 @@ export async function pauseEditing() {
     }
 }
 
+const WS_RECONNECT_BASE = 3000;
+const WS_RECONNECT_MAX = 30000;
+
 export class LockStatusManager {
     constructor(fileId, currentUserId) {
         this.fileId = fileId;
@@ -118,6 +129,7 @@ export class LockStatusManager {
         this.ws = null;
         this.reconnectTimer = null;
         this.pingInterval = null;
+        this._reconnectDelay = WS_RECONNECT_BASE;
     }
 
     get wsUrl() {
@@ -131,6 +143,7 @@ export class LockStatusManager {
         this.ws = new WebSocket(this.wsUrl);
 
         this.ws.onopen = () => {
+            this._reconnectDelay = WS_RECONNECT_BASE;
             this._startPing();
         };
 
@@ -139,14 +152,13 @@ export class LockStatusManager {
                 const data = JSON.parse(event.data);
                 if (data.type === 'init' || data.type === 'lock_change') {
                     if (data.locked_by) {
-                        state.fileLockOwner = data.locked_by;
+                        state.fileLockOwner = data.display_name || data.locked_by;
                         state.isFileLockedByMe = (data.locked_by === this.currentUserId);
                         if (state.isFileLockedByMe && !state.heartbeatInterval) {
                             state.heartbeatInterval = setInterval(sendHeartbeat, 30000);
                         }
-                    } else {
+                    } else if (!state.isFileLockedByMe) {
                         state.fileLockOwner = null;
-                        state.isFileLockedByMe = false;
                         acquireFileLock();
                     }
                     updateFileLockUI();
@@ -157,7 +169,8 @@ export class LockStatusManager {
         this.ws.onclose = () => {
             this._stopPing();
             this.ws = null;
-            this.reconnectTimer = setTimeout(() => this.connect(), 3000);
+            this.reconnectTimer = setTimeout(() => this.connect(), this._reconnectDelay);
+            this._reconnectDelay = Math.min(this._reconnectDelay * 2, WS_RECONNECT_MAX);
         };
 
         this.ws.onerror = () => {

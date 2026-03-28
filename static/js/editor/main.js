@@ -75,8 +75,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (FILE_ID) {
         state.lockStatusManager = new LockStatusManager(FILE_ID, CURRENT_USER_ID);
         state.lockStatusManager.connect();
-
-        await acquireFileLock();
     }
 
     const sidebarList = document.getElementById('sidebarList');

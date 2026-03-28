@@ -11,13 +11,15 @@ from slowapi.errors import RateLimitExceeded
 async def rate_limit_exceeded_handler(
     request: Request, exc: RateLimitExceeded
 ) -> JSONResponse:
-    """Rate Limit 초과 시 429 응답"""
+    """Rate Limit 초과 시 429 응답 (Retry-After 헤더 포함)"""
+    retry_seconds = 5
     return JSONResponse(
         status_code=429,
         content={
             "detail": "요청 횟수가 제한을 초과했습니다. 잠시 후 다시 시도해 주세요.",
-            "retry_after": str(exc.detail),
+            "retry_after": retry_seconds,
         },
+        headers={"Retry-After": str(retry_seconds)},
     )
 
 

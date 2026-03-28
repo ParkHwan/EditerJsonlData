@@ -88,7 +88,7 @@ async def save_draft(
 # Draft 조회
 # ---------------------------------------------------------------------------
 @router.get("/draft/{file_id}/{row_idx}")
-@limiter.limit("100/minute")
+@limiter.limit("300/minute")
 async def get_draft(
     request: Request,
     file_id: str,

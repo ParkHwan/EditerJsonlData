@@ -5,9 +5,9 @@ import { FILE_ID, API_V1_STR, EDIT_MODE } from './config.js';
 import { state } from './state.js';
 import {
     getNestedValue, setNestedValue, deepMerge,
-    classifyValueType, getAllowedTypesForField, unescapeEditValue,
+    classifyValueType,
 } from './utils.js';
-import { validateAllChanges, showSaveConfirm } from './validate.js';
+import { validateAllChanges, showSaveConfirm, extractFieldValue } from './validate.js';
 import { _rebuildListFromDOM } from './list.js';
 import { csrfFetch, showToast } from './api.js';
 import { exitInlineEdit } from './edit.js';
@@ -27,46 +27,14 @@ export function collectInlineChanges() {
 
         const field = el.dataset.field;
         const origType = state.originalTypeMap[field] || 'string';
-        let value;
 
-        if (el.dataset.useTextarea === 'true') {
-            const ta = el.querySelector('.inline-edit-ta');
-            const text = ta ? ta.value.trim() : '';
+        const { value, error } = extractFieldValue(el);
+        if (error || value === undefined) {
+            return;
+        }
 
-            if (origType === 'dict' || origType === 'array') {
-                try {
-                    value = JSON.parse(text);
-                } catch (e) {
-                    value = getNestedValue(state.rawEditData, field);
-                    return;
-                }
-                const newType = classifyValueType(value);
-                if (origType !== newType) {
-                    const allowed = getAllowedTypesForField(field);
-                    if (!allowed || !allowed.includes(newType)) {
-                        value = getNestedValue(state.rawEditData, field);
-                        return;
-                    }
-                }
-                textareaCompleteValues.set(field, value);
-            } else {
-                try { value = JSON.parse(text); } catch { value = text; }
-            }
-        } else {
-            const currentText = el.textContent.trim();
-            if (el.dataset.originalDisplay !== undefined &&
-                currentText === el.dataset.originalDisplay.trim()) {
-                value = getNestedValue(state.rawEditData, field);
-            } else {
-                value = currentText;
-                if (el.dataset.hasEscapes === 'true') {
-                    value = unescapeEditValue(value);
-                }
-            }
-            if (origType === 'number') {
-                const num = Number(value);
-                if (!isNaN(num)) value = num;
-            }
+        if (el.dataset.useTextarea === 'true' && (origType === 'dict' || origType === 'array')) {
+            textareaCompleteValues.set(field, value);
         }
 
         const topKey = field.split('.')[0];
@@ -147,6 +115,9 @@ export async function saveEdit() {
     if (state.currentRowIdx === null) return;
 
     const validation = validateAllChanges();
+    if (validation.errors.length > 0) {
+        showToast(`JSON 유효성 오류 ${validation.errors.length}건 — 수정 후 저장하세요`, 'error');
+    }
     const confirmed = await showSaveConfirm(validation);
     if (!confirmed) return;
 
@@ -226,13 +197,14 @@ export async function cancelEdit() {
         });
 
         if (state.modifiedLists.size > 0) {
+            state.modifiedLists.clear();
+            await exitInlineEdit();
             const activeItem = document.querySelector('.sidebar-item.active');
             if (activeItem) {
                 const rowIdx = parseInt(activeItem.dataset.rowIdx, 10);
                 const dataId = activeItem.dataset.dataId || '';
                 selectItem(activeItem, rowIdx, dataId);
             }
-            state.modifiedLists.clear();
             return;
         }
 

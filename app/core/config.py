@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     BACKUP_DIR: str = "data/backups"
 
     # Rate Limiting
-    RATE_LIMIT_DEFAULT: str = "100/minute"
+    RATE_LIMIT_DEFAULT: str = "300/minute"
     RATE_LIMIT_WRITE: str = "30/minute"
 
     # Audit Logging (Phase 3)

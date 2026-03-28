@@ -22,3 +22,16 @@ export const SPECIAL_KEY_TYPES = {
     '선택지':   { type: 'dict',  allowedTypes: ['dict'],          template: '{\n  "①": "선택지1",\n  "②": "선택지2",\n  "③": "선택지3",\n  "④": "선택지4"\n}', label: 'dict' },
     '매칭항목': { type: 'array', allowedTypes: ['array'],         template: '[\n  ["좌측1", "좌측2", "좌측3"],\n  ["우측1", "우측2", "우측3"]\n]', label: '중첩 list' },
 };
+
+export const CONTEXT_KEY_TYPES = {
+    'add_info.교사첨삭.세부평가.원본기준': { type: 'array', allowedTypes: ['array'],           template: '[\n  "기준1",\n  "기준2"\n]', label: 'list' },
+    'add_info.교사첨삭.평가.원본기준':     { type: 'array', allowedTypes: ['array', 'string'], template: '[\n  "기준1",\n  "기준2"\n]', label: 'list 또는 문자열' },
+};
+
+export function getSpecialKeyInfo(key, sectionPath) {
+    if (sectionPath) {
+        const contextKey = `${sectionPath}.${key}`;
+        if (CONTEXT_KEY_TYPES[contextKey]) return CONTEXT_KEY_TYPES[contextKey];
+    }
+    return SPECIAL_KEY_TYPES[key] || null;
+}

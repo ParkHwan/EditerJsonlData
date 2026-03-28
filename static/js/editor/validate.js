@@ -2,7 +2,7 @@
  * validate.js - JSON 검증, 변경사항 검증, diff 하이라이트, 저장 확인 모달
  */
 import { state } from './state.js';
-import { getNestedValue, classifyValueType, getAllowedTypesForField, escapeHtml } from './utils.js';
+import { getNestedValue, classifyValueType, getAllowedTypesForField, escapeHtml, stripNewlineSymbol, unescapeEditValue } from './utils.js';
 
 export function attachJsonValidator(ta) {
     let msgEl = ta.nextElementSibling;
@@ -55,6 +55,49 @@ export function attachJsonValidator(ta) {
     validate();
 }
 
+export function extractFieldValue(el) {
+    const field = el.dataset.field;
+    const origType = state.originalTypeMap[field] || 'string';
+
+    if (el.dataset.useTextarea === 'true') {
+        const ta = el.querySelector('.inline-edit-ta');
+        const text = ta ? ta.value.trim() : '';
+
+        if (origType === 'dict' || origType === 'array') {
+            try {
+                const parsed = JSON.parse(text);
+                const newType = classifyValueType(parsed);
+                if (origType !== newType) {
+                    const allowed = getAllowedTypesForField(field);
+                    if (!allowed || !allowed.includes(newType)) {
+                        return { value: getNestedValue(state.rawEditData, field), error: `타입 변경 불가: ${origType} → ${newType}` };
+                    }
+                }
+                return { value: parsed };
+            } catch (e) {
+                return { value: undefined, error: `JSON 파싱 오류: ${e.message}` };
+            }
+        }
+        try { return { value: JSON.parse(text) }; } catch { return { value: text }; }
+    }
+
+    const currentText = stripNewlineSymbol(el.textContent).trim();
+    if (el.dataset.originalDisplay !== undefined &&
+        currentText === stripNewlineSymbol(el.dataset.originalDisplay).trim()) {
+        return { value: getNestedValue(state.rawEditData, field) };
+    }
+
+    let value = currentText;
+    if (el.dataset.hasEscapes === 'true') {
+        value = unescapeEditValue(value);
+    }
+    if (origType === 'number') {
+        const num = Number(value);
+        if (!isNaN(num)) value = num;
+    }
+    return { value };
+}
+
 export function validateAllChanges() {
     const card = document.querySelector(`.item[data-row-idx="${state.currentRowIdx}"]`);
     if (!card) return { valid: true, errors: [], warnings: [], changes: [] };
@@ -70,35 +113,29 @@ export function validateAllChanges() {
         const field = el.dataset.field;
         const origType = state.originalTypeMap[field] || 'string';
         const rawOriginal = getNestedValue(state.rawEditData, field);
-        let newValue;
+
+        const { value: newValue, error } = extractFieldValue(el);
+
+        if (error) {
+            errors.push({ field, msg: error });
+            return;
+        }
 
         if (el.dataset.useTextarea === 'true') {
             const ta = el.querySelector('.inline-edit-ta');
             const text = ta ? ta.value.trim() : '';
-
             if (!text && rawOriginal !== null && rawOriginal !== undefined && rawOriginal !== '') {
                 warnings.push({ field, msg: '값이 비어 있습니다 (원래 값 존재)' });
             }
-
             if (origType === 'dict' || origType === 'array') {
-                try {
-                    newValue = JSON.parse(text);
-                    const newType = classifyValueType(newValue);
-                    if (origType !== newType && origType !== 'null') {
-                        const allowed = getAllowedTypesForField(field);
-                        if (!allowed || !allowed.includes(newType)) {
-                            errors.push({ field, msg: `타입 변경 불가: ${origType} → ${newType}` });
-                        }
+                const newType = classifyValueType(newValue);
+                if (origType !== newType && origType !== 'null') {
+                    const allowed = getAllowedTypesForField(field);
+                    if (allowed && allowed.includes(newType)) {
+                        warnings.push({ field, msg: `타입 변경 감지: ${origType} → ${newType}` });
                     }
-                } catch (e) {
-                    errors.push({ field, msg: `JSON 파싱 오류: ${e.message}` });
-                    return;
                 }
-            } else {
-                try { newValue = JSON.parse(text); } catch { newValue = text; }
             }
-        } else {
-            newValue = el.textContent.trim();
         }
 
         const fromStr = (rawOriginal !== null && rawOriginal !== undefined && typeof rawOriginal === 'object')
