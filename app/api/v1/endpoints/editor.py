@@ -432,7 +432,7 @@ async def get_rendered_card(
 
     from app.core.config import settings
     from app.services.gcs_service import gcs_service
-    from app.services.render_service import get_images_from_folder, render_item_card
+    from app.services.render import get_images_from_folder, render_item_card
 
     is_gcs = await gcs_edit_service.is_loaded(file_id)
     gcs_folder_prefix: str = ""
