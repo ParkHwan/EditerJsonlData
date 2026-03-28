@@ -328,7 +328,7 @@ def render_list_items(
         if not isinstance(item_data, dict):
             continue
 
-        html += f'<div class="list-item-card theme-{theme}" data-list-idx="{i}">'
+        html += f'<div class="list-item-card theme-{theme}" data-list-index="{i}" data-list-path-ref="{escape_html(base_path)}">'
         html += '<div class="list-item-header">'
         html += f'<span class="list-item-idx">{i + 1}</span>'
         html += f'{escape_html(label)} [{i}]'
@@ -366,6 +366,8 @@ def render_list_items(
                 )
 
         html += (
+            f'<button class="btn-list-add-key"'
+            f" onclick=\"addListItemKey(this, '{escape_html(base_path)}')\">+ 키</button>"
             f'<button class="btn-list-delete"'
             f" onclick=\"deleteListItem('{escape_html(base_path)}', {i})\">×</button>"
             f'<button class="btn-list-move"'
@@ -383,7 +385,12 @@ def render_list_items(
             style_class = field_styles.get(style_key, "")
 
             td_cls = f"editable-value {style_class}" if style_class else "editable-value"
-            html += f'<tr><th>{escape_html(field_key)}</th>'
+            html += f'<tr data-key="{escape_html(field_key)}"><th>{escape_html(field_key)}'
+            html += (
+                f'<button class="btn-delete-key"'
+                f" onclick=\"deleteListItemKey(this)\" title=\"키 삭제\">×</button>"
+            )
+            html += "</th>"
             html += f'<td class="{td_cls}" data-field="{escape_html(field_path)}" style="white-space:pre-wrap;">'
 
             if val is None or val == "":

@@ -8,7 +8,7 @@ import { LockStatusManager, acquireFileLock, pauseEditing, updateFileLockUI, sen
 import { filterSidebar, selectItem, navigatePrev, navigateNext } from './sidebar.js';
 import { startRowEdit } from './edit.js';
 import { saveEdit, cancelEdit, collectInlineChanges } from './save.js';
-import { toggleSection, addListItem, deleteListItem, moveListItem } from './list.js';
+import { toggleSection, addListItem, deleteListItem, moveListItem, addListItemKey, deleteListItemKey } from './list.js';
 import { addKeyToSection, deleteKeyFromSection, moveKeyUp, moveKeyDown } from './keys.js';
 import { publishToGCS, discardWorkingCopy } from './gcs.js';
 import { restoreDraft, discardDraft } from './draft.js';
@@ -23,6 +23,8 @@ window.toggleSection      = toggleSection;
 window.addListItem        = addListItem;
 window.deleteListItem     = deleteListItem;
 window.moveListItem       = moveListItem;
+window.addListItemKey     = addListItemKey;
+window.deleteListItemKey  = deleteListItemKey;
 window.addKeyToSection    = addKeyToSection;
 window.deleteKeyFromSection = deleteKeyFromSection;
 window.moveKeyUp          = moveKeyUp;

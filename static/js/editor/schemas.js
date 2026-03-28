@@ -28,6 +28,16 @@ export const CONTEXT_KEY_TYPES = {
     'add_info.교사첨삭.평가.원본기준':     { type: 'array', allowedTypes: ['array', 'string'], template: '[\n  "기준1",\n  "기준2"\n]', label: 'list 또는 문자열' },
 };
 
+export const LIST_FIELD_TYPES = {
+    '교사첨삭.세부평가.원본기준': { type: 'array', template: '[\n  "기준1",\n  "기준2"\n]' },
+    '교사첨삭.평가.원본기준':     { type: 'array', template: '[\n  "기준1",\n  "기준2"\n]' },
+};
+
+export function getListFieldType(listPath, fieldKey) {
+    const sectionKey = listPath.replace('add_info.', '');
+    return LIST_FIELD_TYPES[`${sectionKey}.${fieldKey}`] || null;
+}
+
 export function getSpecialKeyInfo(key, sectionPath) {
     if (sectionPath) {
         const contextKey = `${sectionPath}.${key}`;

@@ -3,8 +3,9 @@
  */
 import { state } from './state.js';
 import { escapeHtml, getNestedValue } from './utils.js';
-import { TASK3_LIST_SCHEMAS, TASK2_LIST_SCHEMAS } from './schemas.js';
+import { TASK3_LIST_SCHEMAS, TASK2_LIST_SCHEMAS, getListFieldType } from './schemas.js';
 import { showToast } from './api.js';
+import { attachJsonValidator } from './validate.js';
 
 export function toggleSection(header) {
     const body = header.nextElementSibling;
@@ -17,6 +18,34 @@ export function toggleSection(header) {
         body.style.display = 'none';
         if (icon) icon.textContent = '▶';
     }
+}
+
+function _buildFieldHtml(fieldKey, fieldPath, listPath) {
+    const ft = getListFieldType(listPath, fieldKey);
+    if (ft && (ft.type === 'array' || ft.type === 'dict')) {
+        const rows = Math.max((ft.template || '').split('\n').length, 4);
+        return `
+            <tr data-key="${escapeHtml(fieldKey)}">
+                <th>${escapeHtml(fieldKey)} <span class="special-key-badge">${ft.type}</span>
+                    <button class="btn-delete-key" style="display:inline-block"
+                        onclick="deleteListItemKey(this)" title="키 삭제">×</button>
+                </th>
+                <td class="editable-value" data-field="${escapeHtml(fieldPath)}"
+                    data-editing="true" data-use-textarea="true">
+                    <textarea class="inline-edit-ta" data-original-type="${ft.type}" rows="${rows}">${escapeHtml(ft.template || '')}</textarea>
+                </td>
+            </tr>`;
+    }
+    return `
+        <tr data-key="${escapeHtml(fieldKey)}">
+            <th>${escapeHtml(fieldKey)}
+                <button class="btn-delete-key" style="display:inline-block"
+                    onclick="deleteListItemKey(this)" title="키 삭제">×</button>
+            </th>
+            <td class="editable-value" contenteditable="true"
+                data-field="${escapeHtml(fieldPath)}"
+                data-editing="true"></td>
+        </tr>`;
 }
 
 export function addListItem(listPath) {
@@ -34,28 +63,75 @@ export function addListItem(listPath) {
     let fieldsHtml = '';
     schema.fields.forEach(f => {
         const fieldPath = `${listPath}.${newIdx}.${f}`;
-        fieldsHtml += `
-            <tr>
-                <th>${escapeHtml(f)}</th>
-                <td class="editable-value" contenteditable="true"
-                    data-field="${escapeHtml(fieldPath)}"
-                    data-editing="true"></td>
-            </tr>`;
+        fieldsHtml += _buildFieldHtml(f, fieldPath, listPath);
     });
 
     const itemHtml = `
-        <div class="list-item-card theme-green" data-list-index="${newIdx}">
+        <div class="list-item-card theme-green" data-list-index="${newIdx}" data-list-path-ref="${escapeHtml(listPath)}">
             <div class="list-item-header">
                 <span class="list-item-idx">${newIdx + 1}</span>
                 <span>${escapeHtml(schema.label)} #${newIdx + 1} (신규)</span>
-                <button class="btn-list-delete" style="display:inline-block" onclick="deleteListItem('${escapeHtml(listPath)}', -1, this)">×</button>
+                <button class="btn-list-add-key" style="display:inline-block"
+                    onclick="addListItemKey(this, '${escapeHtml(listPath)}')" title="키 추가">+ 키</button>
+                <button class="btn-list-delete" style="display:inline-block"
+                    onclick="deleteListItem('${escapeHtml(listPath)}', -1, this)">×</button>
             </div>
             <table class="info-table">${fieldsHtml}</table>
         </div>`;
 
     container.insertAdjacentHTML('beforeend', itemHtml);
+
+    const addedCard = container.lastElementChild;
+    addedCard.querySelectorAll('.inline-edit-ta').forEach(ta => attachJsonValidator(ta));
+
     state.modifiedLists.add(listPath);
     showToast(`${schema.label} 항목 추가됨`, 'success');
+}
+
+export function addListItemKey(btnEl, listPath) {
+    const itemCard = btnEl.closest('.list-item-card');
+    if (!itemCard) return;
+    const table = itemCard.querySelector('.info-table');
+    if (!table) return;
+    const idx = itemCard.dataset.listIndex;
+
+    const key = prompt('추가할 키 이름을 입력하세요');
+    if (!key || !key.trim()) return;
+    const keyName = key.trim();
+
+    const existing = table.querySelector(`tr[data-key="${CSS.escape(keyName)}"]`);
+    if (existing && !existing.classList.contains('pending-delete')) {
+        alert(`'${keyName}' 키가 이미 존재합니다.`);
+        return;
+    }
+
+    const fieldPath = `${listPath}.${idx}.${keyName}`;
+    const html = _buildFieldHtml(keyName, fieldPath, listPath);
+    table.insertAdjacentHTML('beforeend', html);
+
+    const newRow = table.lastElementChild;
+    const ta = newRow.querySelector('.inline-edit-ta');
+    if (ta) attachJsonValidator(ta);
+
+    state.modifiedLists.add(listPath);
+    showToast(`'${keyName}' 키가 추가되었습니다`, 'success');
+}
+
+export function deleteListItemKey(btnEl) {
+    const row = btnEl.closest('tr[data-key]');
+    if (!row) return;
+    const keyName = row.dataset.key;
+    if (!confirm(`'${keyName}' 키를 삭제하시겠습니까?`)) return;
+
+    const itemCard = row.closest('.list-item-card');
+    row.classList.add('pending-delete');
+    row.style.display = 'none';
+
+    if (itemCard) {
+        const listPath = itemCard.dataset.listPathRef;
+        if (listPath) state.modifiedLists.add(listPath);
+    }
+    showToast(`'${keyName}' 키가 삭제 예정입니다`, 'info');
 }
 
 export function deleteListItem(listPath, index, btnEl) {
@@ -116,17 +192,24 @@ export function _rebuildListFromDOM(card, listPath) {
 
     items.forEach((itemCard, newIdx) => {
         const obj = {};
+        const origIdx = parseInt(itemCard.dataset.listIndex);
 
-        schema.fields.forEach(fieldKey => {
+        const allKeys = new Set(schema.fields);
+        itemCard.querySelectorAll('tr[data-key]:not(.pending-delete)').forEach(tr => {
+            allKeys.add(tr.dataset.key);
+        });
+
+        allKeys.forEach(fieldKey => {
             const possiblePaths = [
                 `${listPath}.${newIdx}.${fieldKey}`,
-                `${listPath}.${itemCard.dataset.listIndex}.${fieldKey}`,
+                `${listPath}.${origIdx}.${fieldKey}`,
             ];
             let value = undefined;
 
             for (const fullPath of possiblePaths) {
-                const el = itemCard.querySelector(`[data-field="${fullPath}"]`);
+                const el = itemCard.querySelector(`[data-field="${CSS.escape(fullPath)}"]`);
                 if (!el) continue;
+                if (el.closest('.pending-delete')) continue;
 
                 if (el.dataset.useTextarea === 'true') {
                     const ta = el.querySelector('.inline-edit-ta');
@@ -142,7 +225,6 @@ export function _rebuildListFromDOM(card, listPath) {
             }
 
             if (value === undefined) {
-                const origIdx = parseInt(itemCard.dataset.listIndex);
                 const fullPath = `${listPath}.${origIdx}.${fieldKey}`;
                 value = getNestedValue(state.rawEditData, fullPath);
             }
@@ -151,6 +233,12 @@ export function _rebuildListFromDOM(card, listPath) {
                 obj[fieldKey] = value;
             }
         });
+
+        const deletedKeys = new Set();
+        itemCard.querySelectorAll('tr.pending-delete[data-key]').forEach(tr => {
+            deletedKeys.add(tr.dataset.key);
+        });
+        deletedKeys.forEach(k => delete obj[k]);
 
         result.push(obj);
     });

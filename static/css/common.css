@@ -635,6 +635,18 @@ table.info-table td {
     cursor: pointer;
 }
 .btn-list-add:hover { background: #c8e6c9; }
+.btn-list-add-key {
+    display: none;
+    padding: 2px 8px;
+    font-size: 11px;
+    background: #e3f2fd;
+    color: #1565c0;
+    border: 1px dashed #42a5f5;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-left: 4px;
+}
+.btn-list-add-key:hover { background: #bbdefb; }
 .btn-list-delete {
     display: none;
     padding: 2px 8px;

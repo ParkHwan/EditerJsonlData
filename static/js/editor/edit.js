@@ -99,6 +99,7 @@ export function enterInlineEdit(card) {
     card.querySelectorAll('.btn-list-add').forEach(b => b.style.display = 'inline-block');
     card.querySelectorAll('.btn-list-delete').forEach(b => b.style.display = 'inline-block');
     card.querySelectorAll('.btn-list-move').forEach(b => b.style.display = 'inline-block');
+    card.querySelectorAll('.btn-list-add-key').forEach(b => b.style.display = 'inline-block');
 
     document.querySelectorAll('.btn-edit').forEach(b => b.disabled = true);
 

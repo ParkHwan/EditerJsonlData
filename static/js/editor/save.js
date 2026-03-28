@@ -229,6 +229,7 @@ export async function cancelEdit() {
         card.querySelectorAll('.btn-list-add').forEach(b => b.style.display = 'none');
         card.querySelectorAll('.btn-list-delete').forEach(b => b.style.display = 'none');
         card.querySelectorAll('.btn-list-move').forEach(b => b.style.display = 'none');
+        card.querySelectorAll('.btn-list-add-key').forEach(b => b.style.display = 'none');
 
         card.classList.remove('inline-editing');
         const statusEl = card.querySelector('.inline-edit-status');
