@@ -27,9 +27,9 @@ export async function checkDraft(rowIdx, card) {
                     <button class="btn-inline-cancel" onclick="discardDraft()" style="font-size:12px;padding:3px 10px;">무시</button>
                 </div>
             `;
-            const header = card.querySelector('.header');
-            if (header && header.nextSibling) {
-                card.insertBefore(banner, header.nextSibling);
+            const cardContainer = document.getElementById('cardContainer');
+            if (cardContainer) {
+                cardContainer.parentNode.insertBefore(banner, cardContainer);
             } else {
                 card.appendChild(banner);
             }
