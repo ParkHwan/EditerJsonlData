@@ -80,9 +80,7 @@ def render_task1_card(
         f'<div class="header">'
         f'<span class="header-left">No. {idx} | ID: {escape_html(item.get("data_id", ""))}{type_badge}</span>'
         f'<span class="inline-edit-status"></span>'
-        f'<span class="header-actions">'
-        f'<button class="btn-edit" onclick="startRowEdit(\'{escape_html(item.get("data_id", ""))}\', {idx - 1})">편집</button>'
-        f"</span>"
+        f'<span class="header-actions"></span>'
         f"</div>"
     )
 

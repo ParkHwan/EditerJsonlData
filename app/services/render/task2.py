@@ -61,10 +61,8 @@ def render_task2_card(
         f"No. {idx} | ID: {escape_html(item.get('data_id', ''))}{pair_badge}"
         f"</span>"
         f'<span class="inline-edit-status"></span>'
-        f'<span class="header-actions">'
-        f"<button class=\"btn-edit\" onclick=\"startRowEdit("
-        f"'{escape_html(item.get('data_id', ''))}', {idx - 1})\">편집</button>"
-        f"</span></div>"
+        f'<span class="header-actions"></span>'
+        f"</div>"
     )
 
     # ── 1. 논제 섹션 ──

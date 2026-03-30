@@ -4,6 +4,7 @@
 import { FILE_ID, API_V1_STR, GCS_DATE } from './config.js';
 import { state } from './state.js';
 import { showToast, fetchWithRetry } from './api.js';
+import { escapeHtml } from './utils.js';
 
 export function filterSidebar(query) {
     const q = (query || '').toLowerCase();
@@ -50,6 +51,13 @@ export async function selectItem(el, rowIdx, dataId) {
         }
 
         updatePagination(el);
+
+        const toolbarActions = document.getElementById('toolbarEditActions');
+        if (toolbarActions) {
+            const escaped = escapeHtml(dataId);
+            toolbarActions.innerHTML =
+                `<button class="btn btn-edit" onclick="startRowEdit('${escaped}', ${rowIdx})">편집</button>`;
+        }
 
         document.querySelectorAll('.btn-edit').forEach(b => {
             b.disabled = !state.isFileLockedByMe;

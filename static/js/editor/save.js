@@ -5,7 +5,7 @@ import { FILE_ID, API_V1_STR, EDIT_MODE } from './config.js';
 import { state } from './state.js';
 import {
     getNestedValue, setNestedValue, deepMerge,
-    classifyValueType,
+    classifyValueType, escapeHtml,
 } from './utils.js';
 import { validateAllChanges, showSaveConfirm, extractFieldValue } from './validate.js';
 import { _rebuildListFromDOM } from './list.js';
@@ -183,7 +183,7 @@ export async function cancelEdit() {
         if (banner) banner.remove();
 
         const actions = card.querySelector('.header-actions');
-        if (actions && actions.dataset.originalHtml) {
+        if (actions && actions.dataset.originalHtml !== undefined) {
             actions.innerHTML = actions.dataset.originalHtml;
         }
 
@@ -237,6 +237,19 @@ export async function cancelEdit() {
 
         if (window.renderMathInElement && window.__katexOptions) {
             renderMathInElement(card, window.__katexOptions);
+        }
+
+        const toolbarActions = document.getElementById('toolbarEditActions');
+        if (toolbarActions) {
+            const activeItem = document.querySelector('.sidebar-item.active');
+            if (activeItem) {
+                const rid = parseInt(activeItem.dataset.rowIdx, 10);
+                const did = escapeHtml(activeItem.dataset.dataId || '');
+                toolbarActions.innerHTML =
+                    `<button class="btn btn-edit" onclick="startRowEdit('${did}', ${rid})">편집</button>`;
+            } else {
+                toolbarActions.innerHTML = '';
+            }
         }
 
         document.querySelectorAll('.btn-edit').forEach(b => {

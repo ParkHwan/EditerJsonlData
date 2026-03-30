@@ -3,7 +3,7 @@
  */
 import { FILE_ID, API_V1_STR } from './config.js';
 import { state } from './state.js';
-import { getNestedValue, classifyValueType, getAllowedTypesForField, escapeHtml, stripNewlineSymbol } from './utils.js';
+import { getNestedValue, classifyValueType, getAllowedTypesForField, escapeHtml } from './utils.js';
 import { attachJsonValidator } from './validate.js';
 import { checkDraft, startAutoSave } from './draft.js';
 import { fetchWithRetry } from './api.js';
@@ -65,12 +65,9 @@ export function enterInlineEdit(card) {
             el.contentEditable = 'true';
             el.dataset.editing = 'true';
 
-            const text = el.textContent;
-            const cleanText = stripNewlineSymbol(text);
-            if (typeof rawValue === 'string' && rawValue !== cleanText) {
-                el.dataset.hasEscapes = 'true';
-            }
-            el.dataset.originalDisplay = text;
+            const rawStr = (rawValue === null || rawValue === undefined) ? '' : String(rawValue);
+            el.textContent = rawStr;
+            el.dataset.originalDisplay = rawStr;
         }
     });
 
@@ -107,11 +104,15 @@ export function enterInlineEdit(card) {
     if (actions) {
         actions.dataset.originalHtml = actions.innerHTML;
     }
-    actions.innerHTML = `
-        <span class="autosave-indicator" id="autosaveIndicator"></span>
-        <button class="btn-inline-cancel" onclick="cancelEdit()">취소</button>
-        <button class="btn-inline-save" onclick="saveEdit()">저장</button>
-    `;
+
+    const toolbarActions = document.getElementById('toolbarEditActions');
+    if (toolbarActions) {
+        toolbarActions.innerHTML = `
+            <span class="autosave-indicator" id="autosaveIndicator"></span>
+            <button class="btn-inline-cancel" onclick="cancelEdit()">취소</button>
+            <button class="btn-inline-save" onclick="saveEdit()">저장</button>
+        `;
+    }
 
     const statusEl = card.querySelector('.inline-edit-status');
     if (statusEl) statusEl.textContent = '편집 중';

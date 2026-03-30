@@ -133,6 +133,9 @@
     background: white;
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    position: sticky;
+    top: 0;
+    z-index: 20;
 }
 .detail-toolbar-left {
     display: flex;
@@ -254,6 +257,7 @@
     outline: none;
     min-height: 1.4em;
     display: inline-block;
+    white-space: pre-wrap;
     cursor: text;
     transition: border-color 0.2s;
 }
@@ -521,11 +525,47 @@ td.editable-value[contenteditable="true"] {
     text-align: center;
 }
 
-/* ── 편집 비활성화 상태 ── */
-.btn-edit[disabled] {
+/* ── 툴바 편집/저장/취소 버튼 (GCS 버튼과 동일 사이즈) ── */
+.detail-toolbar-right .btn-edit {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.detail-toolbar-right .btn-edit:hover { background: #388E3C; }
+.detail-toolbar-right .btn-edit[disabled] {
     opacity: 0.4;
     cursor: not-allowed;
 }
+.detail-toolbar-right .btn-inline-save {
+    background: #FF6D00;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.detail-toolbar-right .btn-inline-save:hover { background: #E65100; }
+.detail-toolbar-right .btn-inline-cancel {
+    background: #9E9E9E;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+.detail-toolbar-right .btn-inline-cancel:hover { background: #757575; }
 
 /* ── 키 추가/삭제 버튼 ── */
 .btn-add-key {

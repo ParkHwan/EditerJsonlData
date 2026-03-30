@@ -54,6 +54,7 @@
                     {% endif %}
                 </div>
                 <div class="detail-toolbar-right">
+                    <span id="toolbarEditActions"></span>
                     {% if edit_mode == 'gcs' %}
                     <button class="btn btn-gcs-publish" onclick="publishToGCS()">GCS 파일 업데이트</button>
                     <button class="btn btn-gcs-discard" onclick="discardWorkingCopy()">🗑️ 편집 취소</button>
