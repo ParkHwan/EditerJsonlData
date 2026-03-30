@@ -13,7 +13,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx-http-only.conf:/etc/nginx/nginx.conf:ro
-      - ./static:/app/static:ro
+      - static-files:/usr/share/nginx/static:ro
       - nginx-logs:/var/log/nginx
     depends_on:
       web:
@@ -24,11 +24,13 @@ services:
   web:
     image: ${DOCKER_IMAGE:-asia-northeast1-docker.pkg.dev/crowdworks-platform/editer-jsonl/web:latest}
     container_name: editer-jsonl-web
-    command: gunicorn app.main:app -c gunicorn.conf.py
+    command: >
+      sh -c "cp -r /app/static/* /app/static-serve/ && gunicorn app.main:app -c gunicorn.conf.py"
     volumes:
       - ./data:/app/data
       - ./.security:/app/.security:ro
       - app-logs:/app/logs
+      - static-files:/app/static-serve
     env_file:
       - .env.production
     environment:
@@ -93,3 +95,4 @@ volumes:
   redis-slave-data:
   nginx-logs:
   app-logs:
+  static-files:
