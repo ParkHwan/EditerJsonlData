@@ -24,12 +24,18 @@ export const SPECIAL_KEY_TYPES = {
 };
 
 export const CONTEXT_KEY_TYPES = {
+    'add_info.교사첨삭.세부평가.기준':     { type: 'array', allowedTypes: ['array'],           template: '[\n  "기준1",\n  "기준2"\n]', label: 'list' },
     'add_info.교사첨삭.세부평가.원본기준': { type: 'array', allowedTypes: ['array'],           template: '[\n  "기준1",\n  "기준2"\n]', label: 'list' },
+    'add_info.교사첨삭.세부첨삭.유형':     { type: 'array', allowedTypes: ['array'],           template: '[\n  "유형1",\n  "유형2"\n]', label: 'list' },
+    'add_info.교사첨삭.평가.기준':         { type: 'array', allowedTypes: ['array'],           template: '[\n  "기준1",\n  "기준2"\n]', label: 'list' },
     'add_info.교사첨삭.평가.원본기준':     { type: 'array', allowedTypes: ['array', 'string'], template: '[\n  "기준1",\n  "기준2"\n]', label: 'list 또는 문자열' },
 };
 
 export const LIST_FIELD_TYPES = {
+    '교사첨삭.세부평가.기준':     { type: 'array', template: '[\n  "기준1",\n  "기준2"\n]' },
     '교사첨삭.세부평가.원본기준': { type: 'array', template: '[\n  "기준1",\n  "기준2"\n]' },
+    '교사첨삭.세부첨삭.유형':     { type: 'array', template: '[\n  "유형1",\n  "유형2"\n]' },
+    '교사첨삭.평가.기준':         { type: 'array', template: '[\n  "기준1",\n  "기준2"\n]' },
     '교사첨삭.평가.원본기준':     { type: 'array', template: '[\n  "기준1",\n  "기준2"\n]' },
 };
 
