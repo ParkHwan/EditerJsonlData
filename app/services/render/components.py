@@ -369,11 +369,11 @@ def render_list_items(
             f'<button class="btn-list-add-key"'
             f" onclick=\"addListItemKey(this, '{escape_html(base_path)}')\">+ 키</button>"
             f'<button class="btn-list-delete"'
-            f" onclick=\"deleteListItem('{escape_html(base_path)}', {i})\">×</button>"
+            f" onclick=\"deleteListItem('{escape_html(base_path)}', {i}, this)\">×</button>"
             f'<button class="btn-list-move"'
-            f" onclick=\"moveListItem('{escape_html(base_path)}', {i}, 'up')\">▲</button>"
+            f" onclick=\"moveListItem('{escape_html(base_path)}', {i}, 'up', this)\">▲</button>"
             f'<button class="btn-list-move"'
-            f" onclick=\"moveListItem('{escape_html(base_path)}', {i}, 'down')\">▼</button>"
+            f" onclick=\"moveListItem('{escape_html(base_path)}', {i}, 'down', this)\">▼</button>"
         )
         html += "</div>"
 
@@ -387,7 +387,7 @@ def render_list_items(
             td_cls = f"editable-value {style_class}" if style_class else "editable-value"
             html += f'<tr data-key="{escape_html(field_key)}"><th>{escape_html(field_key)}'
             html += (
-                f'<button class="btn-delete-key"'
+                f'<button class="btn-delete-key" style="display:none;"'
                 f" onclick=\"deleteListItemKey(this)\" title=\"키 삭제\">×</button>"
             )
             html += "</th>"

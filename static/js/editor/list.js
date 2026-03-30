@@ -2,7 +2,7 @@
  * list.js - 리스트 CRUD (추가, 삭제, 이동, 토글, 재빌드)
  */
 import { state } from './state.js';
-import { escapeHtml, getNestedValue } from './utils.js';
+import { escapeHtml, getNestedValue, stripNewlineSymbol } from './utils.js';
 import { TASK3_LIST_SCHEMAS, TASK2_LIST_SCHEMAS, getListFieldType } from './schemas.js';
 import { showToast } from './api.js';
 import { attachJsonValidator } from './validate.js';
@@ -148,14 +148,16 @@ export function deleteListItem(listPath, index, btnEl) {
     if (container) _renumberListItems(container);
 }
 
-export function moveListItem(listPath, index, direction) {
+export function moveListItem(listPath, index, direction, btnEl) {
     const card = document.querySelector(`.item[data-row-idx="${state.currentRowIdx}"]`);
     if (!card) return;
     const container = card.querySelector(`[data-list-path="${listPath}"]`);
     if (!container) return;
 
     const items = [...container.querySelectorAll('.list-item-card:not(.pending-delete)')];
-    const itemCard = items.find(c => parseInt(c.dataset.listIndex) === index);
+    const itemCard = btnEl
+        ? btnEl.closest('.list-item-card')
+        : items.find(c => parseInt(c.dataset.listIndex) === index);
     if (!itemCard) return;
 
     const currentIdx = items.indexOf(itemCard);
@@ -216,10 +218,10 @@ export function _rebuildListFromDOM(card, listPath) {
                     if (ta) {
                         try { value = JSON.parse(ta.value.trim()); } catch { value = ta.value.trim(); }
                     }
-                } else if (el.dataset.editing === 'true') {
-                    value = el.textContent.trim();
                 } else {
-                    value = el.textContent.trim();
+                    let raw = stripNewlineSymbol(el.textContent).trim();
+                    if (raw === '(없음)') raw = '';
+                    value = raw;
                 }
                 break;
             }
