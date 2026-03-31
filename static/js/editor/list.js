@@ -202,11 +202,22 @@ export function moveListItem(listPath, index, direction, btnEl) {
 
     const currentIdx = items.indexOf(itemCard);
 
+    let moved = false;
     if (direction === 'up' && currentIdx > 0) {
         container.insertBefore(itemCard, items[currentIdx - 1]);
+        moved = true;
     } else if (direction === 'down' && currentIdx < items.length - 1) {
         const next = items[currentIdx + 1];
         container.insertBefore(next, itemCard);
+        moved = true;
+    }
+
+    if (moved) {
+        container.querySelectorAll('.list-item-card').forEach(c => c.classList.remove('list-item-moved'));
+        itemCard.classList.add('list-item-moved');
+        itemCard.style.animation = 'none';
+        void itemCard.offsetHeight;
+        itemCard.style.animation = '';
     }
 
     _renumberListItems(container);
