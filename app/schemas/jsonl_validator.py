@@ -90,8 +90,8 @@ def _check_optional_field(
                 if isinstance(expected_type, type)
                 else "/".join(t.__name__ for t in expected_type)
             )
-            result.add_warning(
-                f"{path}.{key}: {type_names} 타입 권장 "
+            result.add_error(
+                f"{path}.{key}: {type_names} 타입이어야 합니다 "
                 f"(현재: {type(data[key]).__name__})"
             )
 
@@ -119,7 +119,7 @@ def _check_list_of_dicts(
 
     for i, item in enumerate(val):
         if not isinstance(item, dict):
-            result.add_warning(
+            result.add_error(
                 f"{path}.{key}[{i}]: dict 타입이어야 합니다 "
                 f"(현재: {type(item).__name__})"
             )
@@ -152,12 +152,12 @@ def _check_list_of_type(
     for i, item in enumerate(val):
         if item_type is int:
             if not isinstance(item, int) or isinstance(item, bool):
-                result.add_warning(
+                result.add_error(
                     f"{path}.{key}[{i}]: {type_name} 타입이어야 합니다 "
                     f"(현재: {type(item).__name__})"
                 )
         elif not isinstance(item, item_type):
-            result.add_warning(
+            result.add_error(
                 f"{path}.{key}[{i}]: {type_name} 타입이어야 합니다 "
                 f"(현재: {type(item).__name__})"
             )
@@ -206,7 +206,7 @@ def _validate_content_meta(
     path = "content_meta"
     for tag_name, tag_data in content_meta.items():
         if not isinstance(tag_data, dict):
-            result.add_warning(f"{path}.{tag_name}: dict 타입이어야 합니다")
+            result.add_error(f"{path}.{tag_name}: dict 타입이어야 합니다")
             continue
 
         tag_path = f"{path}.{tag_name}"
@@ -481,7 +481,7 @@ def validate_row(row: dict[str, Any]) -> ValidationResult:
         if isinstance(cm, dict):
             _validate_content_meta(cm, result)
         else:
-            result.add_warning("content_meta: dict 타입이어야 합니다")
+            result.add_error("content_meta: dict 타입이어야 합니다")
 
     add_info = row.get("add_info")
     if add_info is not None:
