@@ -32,6 +32,7 @@ from app.core.logger import logger
 from app.core.pending_tasks import PendingTaskTracker
 from app.core.rate_limit import limiter
 from app.schemas.item import LockResponse
+from app.schemas.jsonl_validator import validate_row_safe
 from app.services.audit_service import audit_service
 from app.services.auth_service import AuthService
 from app.services.draft_service import DraftService
@@ -262,6 +263,9 @@ async def save_data(
             metadata={"mode": "gcs_redis" if is_gcs else "local"},
         )
 
+        vr = validate_row_safe(updated_data)
+        validation_warnings = vr.warnings if vr.warnings else []
+
         if is_gcs:
             try:
                 meta = await gcs_edit_service.get_meta(file_id)
@@ -281,6 +285,7 @@ async def save_data(
             "success": True,
             "data": updated_data,
             "mode": "gcs_redis" if is_gcs else "local",
+            "validation_warnings": validation_warnings,
         }
 
 
@@ -303,6 +308,22 @@ async def publish_to_gcs(
 
     if not await gcs_edit_service.is_loaded(file_id):
         raise HTTPException(status_code=404, detail="GCS 편집 세션을 찾을 수 없습니다.")
+
+    validation = await gcs_edit_service.validate_all_rows(file_id)
+    if validation["errors"]:
+        error_summary = "; ".join(
+            f"Row {e['row_idx']}: {', '.join(e['messages'])}"
+            for e in validation["errors"][:5]
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": f"스키마 검증 실패 ({len(validation['errors'])}건). 수정 후 다시 시도하세요.",
+                "validation_errors": validation["errors"],
+                "validation_warnings": validation["warnings"],
+                "summary": error_summary,
+            },
+        )
 
     try:
         gcs_path = await gcs_edit_service.publish_to_gcs(file_id)
@@ -343,6 +364,7 @@ async def publish_to_gcs(
         "success": True,
         "gcs_path": gcs_path,
         "message": f"GCS 파일 업데이트 완료: {gcs_path}",
+        "validation_warnings": validation["warnings"],
     }
 
 

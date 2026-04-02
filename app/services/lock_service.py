@@ -18,16 +18,27 @@ class LockService:
         return f"lock:{file_id}"
 
     async def acquire_lock(self, file_id: str, user_id: str) -> bool:
-        """파일 단위 Lock 획득. 동일 사용자면 TTL 갱신."""
+        """파일 단위 Lock 획득 (원자적).
+
+        SET NX EX를 사용하여 Race Condition을 방지한다.
+        동일 사용자가 이미 Lock을 보유하고 있으면 TTL을 갱신한다.
+        """
         key = self._get_key(file_id)
+
+        acquired = await self.redis.set(
+            key, user_id, ex=self.LOCK_TTL, nx=True,
+        )
+        if acquired:
+            logger.info(f"File lock acquired: {key} by {user_id}")
+            return True
+
         current_owner = await self.redis.get(key)
+        if current_owner == user_id:
+            await self.redis.expire(key, self.LOCK_TTL)
+            logger.info(f"File lock TTL renewed: {key} by {user_id}")
+            return True
 
-        if current_owner and current_owner != user_id:
-            return False
-
-        await self.redis.set(key, user_id, ex=self.LOCK_TTL)
-        logger.info(f"File lock acquired: {key} by {user_id}")
-        return True
+        return False
 
     async def heartbeat(self, file_id: str, user_id: str) -> int:
         """Lock TTL 연장. 소유자만 가능."""

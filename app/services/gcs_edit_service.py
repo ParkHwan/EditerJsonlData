@@ -11,6 +11,7 @@ GCS JSONL을 로컬 파일 없이 직접 편집하기 위한 서비스.
 Redis 키 구조:
     gcs_wc:{file_id}:rows  → Hash { "0": json_str, "1": json_str, ... }
     gcs_wc:{file_id}:meta  → Hash { gcs_path, date_str, total_rows, loaded_at }
+    gcs_wc:{file_id}:idx   → Hash { "0": "data_id|pair_idx", ... }  (사이드바 경량 인덱스)
 """
 
 from __future__ import annotations
@@ -22,10 +23,12 @@ from typing import Any
 
 from app.core.logger import logger
 from app.db.redis_client import get_redis_client
+from app.schemas.jsonl_validator import ValidationResult, validate_row_safe
 from app.services.gcs_service import gcs_service
 
 WORKING_COPY_PREFIX = "gcs_wc"
 WORKING_COPY_TTL = 86400  # 24시간
+PIPELINE_CHUNK_SIZE = 500
 
 EDITABLE_FIELDS = {"content", "content_meta", "add_info"}
 
@@ -38,6 +41,19 @@ class GCSEditService:
 
     def _meta_key(self, file_id: str) -> str:
         return f"{WORKING_COPY_PREFIX}:{file_id}:meta"
+
+    def _idx_key(self, file_id: str) -> str:
+        return f"{WORKING_COPY_PREFIX}:{file_id}:idx"
+
+    @staticmethod
+    def _build_idx_value(row: dict[str, Any]) -> str:
+        """data_id와 pair_idx를 파이프로 결합한 인덱스 값 생성."""
+        data_id = row.get("data_id", "")
+        add_info = row.get("add_info")
+        pair_idx = ""
+        if isinstance(add_info, dict):
+            pair_idx = add_info.get("pairIDX", "")
+        return f"{data_id}|{pair_idx}"
 
     async def is_loaded(self, file_id: str) -> bool:
         """파일이 Redis working copy에 로드되어 있는지 확인"""
@@ -59,29 +75,49 @@ class GCSEditService:
             return blob.download_as_text(encoding="utf-8")
 
         raw_text = await asyncio.to_thread(_download_text)
-        lines = [line.strip() for line in raw_text.strip().split("\n") if line.strip()]
 
-        pipe = redis.pipeline()
-        await pipe.delete(rows_key)
-        for idx, line in enumerate(lines):
-            row = json.loads(line)
-            if "_version" not in row:
-                row["_version"] = 1
-            await pipe.hset(rows_key, str(idx), json.dumps(row, ensure_ascii=False))
-        await pipe.execute()
+        def _parse_lines() -> tuple[list[str], dict[str, str]]:
+            parsed: list[str] = []
+            idx_map: dict[str, str] = {}
+            for i, line in enumerate(raw_text.strip().split("\n")):
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                if "_version" not in row:
+                    row["_version"] = 1
+                idx_val = GCSEditService._build_idx_value(row)
+                idx_map[str(len(parsed))] = idx_val
+                parsed.append(json.dumps(row, ensure_ascii=False))
+            return parsed, idx_map
+
+        parsed_lines, idx_map = await asyncio.to_thread(_parse_lines)
+        idx_key = self._idx_key(file_id)
+
+        await redis.delete(rows_key, idx_key)
+        for chunk_start in range(0, len(parsed_lines), PIPELINE_CHUNK_SIZE):
+            chunk = parsed_lines[chunk_start:chunk_start + PIPELINE_CHUNK_SIZE]
+            pipe = redis.pipeline()
+            for offset, json_str in enumerate(chunk):
+                key_str = str(chunk_start + offset)
+                await pipe.hset(rows_key, key_str, json_str)
+                if key_str in idx_map:
+                    await pipe.hset(idx_key, key_str, idx_map[key_str])
+            await pipe.execute()
 
         await redis.hset(meta_key, mapping={
             "gcs_path": gcs_path,
             "date_str": date_str,
-            "total_rows": str(len(lines)),
+            "total_rows": str(len(parsed_lines)),
             "loaded_at": datetime.now(tz=timezone.utc).isoformat(),
         })
 
         await redis.expire(rows_key, WORKING_COPY_TTL)
         await redis.expire(meta_key, WORKING_COPY_TTL)
+        await redis.expire(idx_key, WORKING_COPY_TTL)
 
-        logger.info(f"GCS → Redis: {file_id} ({len(lines)} rows) from {gcs_path}")
-        return len(lines)
+        logger.info(f"GCS → Redis: {file_id} ({len(parsed_lines)} rows) from {gcs_path}")
+        return len(parsed_lines)
 
     async def get_meta(self, file_id: str) -> dict[str, str] | None:
         """working copy 메타데이터 조회"""
@@ -134,19 +170,42 @@ class GCSEditService:
 
         await redis.hset(rows_key, str(row_idx), json.dumps(row, ensure_ascii=False))
 
+        if "add_info" in changes:
+            idx_val = self._build_idx_value(row)
+            await redis.hset(self._idx_key(file_id), str(row_idx), idx_val)
+
         await redis.expire(rows_key, WORKING_COPY_TTL)
         await redis.expire(self._meta_key(file_id), WORKING_COPY_TTL)
+        await redis.expire(self._idx_key(file_id), WORKING_COPY_TTL)
 
         logger.info(f"Redis row updated: {file_id}[{row_idx}] by {user_id}")
         return row
 
     async def get_data_id_list(self, file_id: str) -> list[dict[str, Any]]:
-        """모든 행의 data_id 목록 반환 (사이드바용)"""
-        redis = await get_redis_client()
-        rows_key = self._rows_key(file_id)
-        all_rows = await redis.hgetall(rows_key)
+        """모든 행의 data_id 목록 반환 (사이드바용).
 
-        items: list[dict[str, Any]] = []
+        경량 인덱스 Hash를 우선 사용하여 전체 row 파싱을 회피한다.
+        인덱스가 없으면 rows Hash에서 폴백.
+        """
+        redis = await get_redis_client()
+        idx_key = self._idx_key(file_id)
+        idx_data = await redis.hgetall(idx_key)
+
+        if idx_data:
+            items: list[dict[str, Any]] = []
+            for idx_str in sorted(idx_data.keys(), key=int):
+                parts = idx_data[idx_str].split("|", 1)
+                data_id = parts[0] if parts[0] else f"row_{idx_str}"
+                pair_idx = parts[1] if len(parts) > 1 else ""
+                items.append({
+                    "row_idx": int(idx_str),
+                    "data_id": data_id,
+                    "pair_idx": pair_idx,
+                })
+            return items
+
+        all_rows = await redis.hgetall(self._rows_key(file_id))
+        items = []
         for idx_str in sorted(all_rows.keys(), key=int):
             row = json.loads(all_rows[idx_str])
             add_info = row.get("add_info")
@@ -174,22 +233,26 @@ class GCSEditService:
         gcs_path = meta["gcs_path"]
         all_rows = await redis.hgetall(self._rows_key(file_id))
 
-        lines: list[str] = []
-        for idx_str in sorted(all_rows.keys(), key=int):
-            row = json.loads(all_rows[idx_str])
-            row.pop("_version", None)
-            row.pop("_last_edited_by", None)
-            row.pop("_last_edited_at", None)
-            lines.append(json.dumps(row, ensure_ascii=False))
+        def _build_jsonl(raw_rows: dict[str, str]) -> tuple[str, int]:
+            result_lines: list[str] = []
+            for idx_str in sorted(raw_rows.keys(), key=int):
+                row = json.loads(raw_rows[idx_str])
+                row.pop("_version", None)
+                row.pop("_last_edited_by", None)
+                row.pop("_last_edited_at", None)
+                result_lines.append(json.dumps(row, ensure_ascii=False))
+            return "\n".join(result_lines) + "\n", len(result_lines)
 
-        jsonl_content = "\n".join(lines) + "\n"
+        jsonl_content, line_count = await asyncio.to_thread(
+            _build_jsonl, all_rows,
+        )
 
         def _upload() -> None:
             blob = gcs_service.bucket.blob(gcs_path)
             blob.upload_from_string(jsonl_content, content_type="application/json")
 
         await asyncio.to_thread(_upload)
-        logger.info(f"Redis → GCS updated: {file_id} ({len(lines)} rows) → {gcs_path}")
+        logger.info(f"Redis → GCS updated: {file_id} ({line_count} rows) → {gcs_path}")
 
         await gcs_service.invalidate_cache()
         return gcs_path
@@ -197,7 +260,11 @@ class GCSEditService:
     async def discard(self, file_id: str) -> None:
         """Redis working copy 삭제 (편집 취소)"""
         redis = await get_redis_client()
-        await redis.delete(self._rows_key(file_id), self._meta_key(file_id))
+        await redis.delete(
+            self._rows_key(file_id),
+            self._meta_key(file_id),
+            self._idx_key(file_id),
+        )
         logger.info(f"Working copy discarded: {file_id}")
 
     async def list_active_sessions(self) -> list[dict[str, str]]:
@@ -224,6 +291,36 @@ class GCSEditService:
         redis = await get_redis_client()
         await redis.expire(self._rows_key(file_id), WORKING_COPY_TTL)
         await redis.expire(self._meta_key(file_id), WORKING_COPY_TTL)
+        await redis.expire(self._idx_key(file_id), WORKING_COPY_TTL)
+
+    async def validate_all_rows(
+        self, file_id: str,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """전체 row에 대한 JSONL 스키마 검증을 수행한다.
+
+        Returns:
+            {"errors": [...], "warnings": [...]}
+            각 항목은 {"row_idx": int, "messages": list[str]} 형태.
+        """
+        redis = await get_redis_client()
+        all_rows = await redis.hgetall(self._rows_key(file_id))
+
+        error_items: list[dict[str, Any]] = []
+        warning_items: list[dict[str, Any]] = []
+
+        for idx_str in sorted(all_rows.keys(), key=int):
+            row = json.loads(all_rows[idx_str])
+            vr = validate_row_safe(row)
+            if vr.errors:
+                error_items.append(
+                    {"row_idx": int(idx_str), "messages": vr.errors}
+                )
+            if vr.warnings:
+                warning_items.append(
+                    {"row_idx": int(idx_str), "messages": vr.warnings}
+                )
+
+        return {"errors": error_items, "warnings": warning_items}
 
 
 gcs_edit_service = GCSEditService()
