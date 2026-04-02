@@ -68,7 +68,7 @@ def render_task2_card(
     # ── 1. 논제 섹션 ──
     topic = add_info.get("논제", {})
     if isinstance(topic, dict):
-        topic_fields = ["회차", "출처", "글자수", "제목", "본문"]
+        topic_fields = ["회차", "출처", "유형", "글자수", "제목", "본문"]
         html += '<div class="section-block section-논제" data-section="add_info.논제">'
         html += (
             '<div class="section-header" onclick="toggleSection(this)">'
@@ -97,16 +97,17 @@ def render_task2_card(
     # ── 2. 논제분석 섹션 ──
     analysis = add_info.get("논제분석", {})
     if isinstance(analysis, dict):
+        analysis_fields = ["해설", "예시답안", "평가기준"]
         html += '<div class="section-block section-논제분석" data-section="add_info.논제분석">'
         html += (
             '<div class="section-header" onclick="toggleSection(this)">'
             '<span class="section-icon">🔍</span> 논제분석'
-            '<span class="section-count">(2개 필드)</span>'
+            f'<span class="section-count">({len(analysis_fields)}개 필드)</span>'
             '<span class="toggle-icon">▼</span></div>'
         )
         html += '<div class="section-body"><table class="info-table">'
 
-        for key in ("해설", "예시답안"):
+        for key in analysis_fields:
             val = analysis.get(key, "")
             field_path = f"add_info.논제분석.{key}"
             rendered = (

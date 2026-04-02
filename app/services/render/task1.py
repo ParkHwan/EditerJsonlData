@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import escape_html, format_text_with_newlines
+from .base import escape_html, format_text_with_newlines, render_image_tag
 from .components import (
     process_content_with_tags,
     render_bogi,
@@ -196,6 +196,20 @@ def render_task1_card(
                 html += render_match_table(
                     v, meta, comparison, gcs_image_base_url
                 )
+            elif k == "부가정보" and isinstance(v, dict):
+                html += '<table class="info-table" style="margin:4px 0;">'
+                for bk, bv in v.items():
+                    rendered_bv = process_content_with_tags(
+                        bv, meta, comparison, gcs_image_base_url
+                    )
+                    html += (
+                        f'<tr><th style="background:#78909C;color:#fff;width:80px;">'
+                        f'{escape_html(bk)}</th>'
+                        f'<td class="editable-value" '
+                        f'data-field="{section_path}.부가정보.{escape_html(bk)}">'
+                        f'{rendered_bv}</td></tr>'
+                    )
+                html += '</table>'
             else:
                 html += process_content_with_tags(
                     v, meta, comparison, gcs_image_base_url
@@ -211,6 +225,33 @@ def render_task1_card(
                 f"+ 키 추가</button>"
             )
         html += "</div>"
+
+    # ── add_images 섹션 (첨부 이미지) ──
+    add_images = add_info.get("add_images")
+    if isinstance(add_images, list) and add_images:
+        html += '<div class="section-block" data-section="add_info.add_images">'
+        html += (
+            '<div class="section-header" onclick="toggleSection(this)">'
+            '<span class="section-icon">🖼️</span> 첨부 이미지'
+            f'<span class="section-count">({len(add_images)}개)</span>'
+            '<span class="toggle-icon">▼</span></div>'
+        )
+        html += '<div class="section-body" style="display:flex;flex-wrap:wrap;gap:8px;">'
+        for ai_idx, img_item in enumerate(add_images):
+            if isinstance(img_item, str):
+                html += render_image_tag(img_item, comparison, gcs_image_base_url)
+            elif isinstance(img_item, dict):
+                fname = img_item.get("file_name", img_item.get("filename", ""))
+                if fname:
+                    html += render_image_tag(fname, comparison, gcs_image_base_url)
+                else:
+                    html += (
+                        f'<div class="editable-value" '
+                        f'data-field="add_info.add_images.{ai_idx}">'
+                        f'{format_text_with_newlines(str(img_item))}'
+                        f'</div>'
+                    )
+        html += '</div></div>'
 
     html += "</div>"
     return html

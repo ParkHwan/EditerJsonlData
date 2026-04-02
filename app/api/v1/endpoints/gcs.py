@@ -25,6 +25,16 @@ import hmac
 from pathlib import Path
 from typing import Any
 
+_DOWNLOAD_SEMAPHORE: asyncio.Semaphore | None = None
+
+
+def _get_download_semaphore() -> asyncio.Semaphore:
+    global _DOWNLOAD_SEMAPHORE
+    if _DOWNLOAD_SEMAPHORE is None:
+        _DOWNLOAD_SEMAPHORE = asyncio.Semaphore(3)
+    return _DOWNLOAD_SEMAPHORE
+
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -501,19 +511,23 @@ async def download_jsonl_all(
     start_time = time.monotonic()
 
     try:
-        files = await gcs_service.list_all_blobs(
-            safe_date, task_id=task, extensions={".jsonl"},
-        )
-        if not files:
-            raise HTTPException(status_code=404, detail="해당 폴더에 JSONL 파일이 없습니다")
+        async with _get_download_semaphore():
+            files = await gcs_service.list_all_blobs(
+                safe_date, task_id=task, extensions={".jsonl"},
+            )
+            if not files:
+                raise HTTPException(status_code=404, detail="해당 폴더에 JSONL 파일이 없습니다")
 
-        results = await gcs_service.download_blobs_concurrent(files)
+            results = await gcs_service.download_blobs_concurrent(files)
 
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for rel_path, data in results:
-                zf.writestr(rel_path, data)
-        zip_bytes = buf.getvalue()
+        def _build_zip(items: list[tuple[str, bytes]]) -> bytes:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for rel_path, data in items:
+                    zf.writestr(rel_path, data)
+            return buf.getvalue()
+
+        zip_bytes = await asyncio.to_thread(_build_zip, results)
 
         duration_ms = int((time.monotonic() - start_time) * 1000)
         total_size = sum(f.get("size", 0) for f in files)

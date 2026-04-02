@@ -386,6 +386,60 @@ class MetadataService:
     # ------------------------------------------------------------------
     # Combined: 행 저장
     # ------------------------------------------------------------------
+    def _on_row_save_batch_sync(
+        self,
+        gcs_path: str,
+        user_id: str,
+        display_name: str,
+        row_idx: int,
+        changed_fields: list[str],
+    ) -> None:
+        """행 저장 시 file_registry 조회/갱신 + edit_events 삽입을 단일 트랜잭션으로 처리."""
+        cursor = DuckDBClient.get_read_cursor()
+        result = cursor.execute(
+            "SELECT id FROM file_registry WHERE gcs_path = ?", [gcs_path],
+        ).fetchone()
+        cursor.close()
+
+        if not result:
+            file_name = gcs_path.rsplit("/", 1)[-1] if "/" in gcs_path else gcs_path
+            task_id = _extract_task_id(gcs_path)
+            date_folder = _extract_date_folder(gcs_path)
+            row_result = DuckDBClient.execute_write(
+                """
+                INSERT INTO file_registry (
+                    gcs_path, file_name, task_id, date_folder,
+                    created_by, status,
+                    content_stats, update_count, total_edit_sessions
+                ) VALUES (?, ?, ?, ?, ?, 'registered',
+                    {'total_rows': 0, 'has_images': false, 'data_id_range': ''},
+                    0, 0)
+                RETURNING id
+                """,
+                [gcs_path, file_name, task_id, date_folder, user_id],
+            ).fetchone()
+            file_id = int(row_result[0]) if row_result else 0
+        else:
+            file_id = int(result[0])
+
+        summary = f"row {row_idx}: {', '.join(changed_fields)}"
+        fields_param = changed_fields if changed_fields else []
+        DuckDBClient.execute_write_many([
+            (
+                "UPDATE file_registry SET last_modified_by = ?, last_modified_at = now(), updated_at = now() WHERE gcs_path = ?",
+                [user_id, gcs_path],
+            ),
+            (
+                """
+                INSERT INTO edit_events (
+                    file_id, gcs_path, user_id, display_name,
+                    event_type, summary, rows_affected, modified_fields
+                ) VALUES (?, ?, ?, ?, 'row_save'::event_type, ?, 1, ?)
+                """,
+                [file_id, gcs_path, user_id, display_name, summary, fields_param],
+            ),
+        ])
+
     async def on_row_save(
         self,
         gcs_path: str,
@@ -394,21 +448,10 @@ class MetadataService:
         row_idx: int,
         changed_fields: list[str],
     ) -> None:
-        """행 저장 시 file_registry UPDATE + edit_events INSERT"""
-        file_id = await self.get_or_create_file(gcs_path, user_id)
-
-        await self.update_file_status(
-            gcs_path, modified_by=user_id
-        )
-        await self.record_event(
-            file_id=file_id,
-            gcs_path=gcs_path,
-            user_id=user_id,
-            display_name=display_name,
-            event_type="row_save",
-            summary=f"row {row_idx}: {', '.join(changed_fields)}",
-            rows_affected=1,
-            modified_fields=changed_fields,
+        """행 저장 시 file_registry UPDATE + edit_events INSERT (단일 배치)"""
+        await asyncio.to_thread(
+            self._on_row_save_batch_sync,
+            gcs_path, user_id, display_name, row_idx, changed_fields,
         )
 
     # ------------------------------------------------------------------
