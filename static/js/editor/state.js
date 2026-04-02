@@ -24,4 +24,7 @@ export const state = {
     addedKeys: new Map(),
     reorderedSections: new Map(),
     modifiedLists: new Set(),
+
+    validationErrors: [],
+    validationFilterActive: false,
 };

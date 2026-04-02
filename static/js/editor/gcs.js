@@ -5,6 +5,7 @@ import { FILE_ID, API_V1_STR, EDIT_MODE, GCS_DATE, GCS_TASK } from './config.js'
 import { state } from './state.js';
 import { csrfFetch, showToast, showValidationPanel } from './api.js';
 import { updateFileLockUI } from './lock.js';
+import { highlightValidationErrors, clearValidationHighlights } from './sidebar.js';
 
 export async function publishToGCS() {
     if (EDIT_MODE !== 'gcs') return;
@@ -28,6 +29,7 @@ export async function publishToGCS() {
         });
         const data = await resp.json();
         if (resp.ok) {
+            clearValidationHighlights();
             state.isFileLockedByMe = false;
             state.fileLockOwner = null;
             updateFileLockUI();
@@ -61,6 +63,7 @@ export async function publishToGCS() {
                     warnings: detail.validation_warnings || [],
                     summary: detail.summary || '',
                 });
+                highlightValidationErrors(detail.validation_errors);
             } else {
                 showToast(typeof detail === 'string' ? detail : (detail?.message || 'GCS 파일 업데이트 실패'), 'error');
             }
