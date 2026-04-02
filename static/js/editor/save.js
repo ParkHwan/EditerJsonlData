@@ -9,7 +9,7 @@ import {
 } from './utils.js';
 import { validateAllChanges, showSaveConfirm, extractFieldValue } from './validate.js';
 import { _rebuildListFromDOM } from './list.js';
-import { csrfFetch, showToast } from './api.js';
+import { csrfFetch, showToast, showValidationPanel } from './api.js';
 import { exitInlineEdit } from './edit.js';
 import { selectItem } from './sidebar.js';
 
@@ -139,11 +139,20 @@ export async function saveEdit() {
             return;
         }
 
-        await resp.json();
+        const result = await resp.json();
+        const serverWarnings = result.validation_warnings || [];
+
         if (EDIT_MODE === 'gcs') {
             showToast('저장 완료! (Redis에 임시 저장됨 — "GCS 파일 업데이트"로 최종 반영)', 'success');
         } else {
             showToast('저장 완료!', 'success');
+        }
+
+        if (serverWarnings.length > 0) {
+            showValidationPanel({
+                title: `스키마 검증 경고 (Row ${state.currentRowIdx})`,
+                warnings: serverWarnings,
+            });
         }
         const savedRowIdx = state.currentRowIdx;
         const savedDataId = state.currentDataId;
