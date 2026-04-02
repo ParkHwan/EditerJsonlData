@@ -66,6 +66,195 @@ def _strip_empty_values(data: Any) -> Any:
     return data
 
 
+# ──────────────────────────────────────────────
+# 스키마 인식 Strip: 필수 키 보존, 선택 키 빈값 제거
+# ──────────────────────────────────────────────
+# SchemaNode 규약
+#   "_R": frozenset(...)  — 해당 레벨 필수 키 집합
+#   "_R": "*"             — 해당 레벨 모든 키 필수 (동적 태그명 등)
+#   "key": sub_schema     — 하위 dict 구조 스키마
+#   "*": sub_schema       — 와일드카드: 이름과 무관하게 모든 키에 적용
+#   "_ITEM": sub_schema   — list[dict] 각 항목에 적용할 스키마
+
+_SchemaNode = dict[str, Any]
+
+# -- content_meta 내부 태그 --
+_CM_TAG_SCHEMA: _SchemaNode = {
+    "_R": frozenset({"type", "info", "tag_properties"}),
+    "tag_properties": {"_R": frozenset()},
+    "img_size": {"_R": frozenset({"channel", "height", "width"})},
+    "bbox": {"_R": frozenset({"x1", "y1", "x2", "y2"})},
+}
+
+_CONTENT_META_SCHEMA: _SchemaNode = {
+    "_R": "*",
+    "*": _CM_TAG_SCHEMA,
+}
+
+# -- TASK1 add_info --
+_TASK1_ADD_INFO_SCHEMA: _SchemaNode = {
+    "_R": frozenset({"page_num", "source_file", "book_meta", "unit_meta"}),
+    "book_meta": {
+        "_R": frozenset({"학교급", "과목", "학년", "학기", "도서시리즈", "연도"}),
+    },
+    "unit_meta": {
+        "_R": frozenset({"유형", "학습파트", "대단원", "중단원"}),
+    },
+    "문제": {
+        "_R": frozenset({"문제유형", "단일질문"}),
+        "부가정보": {"_R": frozenset()},
+    },
+    "풀이": {"_R": frozenset()},
+}
+
+# -- TASK2 add_info --
+_TASK2_ADD_INFO_SCHEMA: _SchemaNode = {
+    "_R": frozenset({"pairIDX", "source_file", "논제", "논제분석", "학생답안", "교사첨삭"}),
+    "논제": {"_R": frozenset({"회차", "출처", "본문"})},
+    "논제분석": {"_R": frozenset({"해설", "예시답안"})},
+    "교사첨삭": {
+        "_R": frozenset({"총평가", "세부첨삭"}),
+        "총평가": {"_ITEM": {"_R": frozenset({"유형", "내용"})}},
+        "세부평가": {"_ITEM": {"_R": frozenset()}},
+        "세부첨삭": {"_ITEM": {"_R": frozenset({"원본", "유형", "내용"})}},
+    },
+}
+
+# -- TASK3 add_info --
+_TASK3_ADD_INFO_SCHEMA: _SchemaNode = {
+    "_R": frozenset({"pairIDX", "source_file", "논제", "논제분석", "학생답안", "교사첨삭"}),
+    "논제": {
+        "_R": frozenset({"회차", "출처", "제시문", "문항"}),
+        "문항": {
+            "_R": frozenset({"질문"}),
+            "질문": {"_ITEM": {"_R": frozenset({"번호", "본문"})}},
+        },
+    },
+    "논제분석": {
+        "_R": frozenset(),
+        "예시답안": {
+            "_R": frozenset(),
+            "문항_질문": {"_ITEM": {"_R": frozenset()}},
+        },
+        "평가기준": {
+            "_R": frozenset(),
+            "문항_질문": {"_ITEM": {"_R": frozenset()}},
+        },
+    },
+    "학생답안": {
+        "_R": frozenset({"문항_질문"}),
+        "문항_질문": {"_ITEM": {"_R": frozenset({"번호", "답안"})}},
+    },
+    "교사첨삭": {
+        "_R": frozenset({"세부첨삭"}),
+        "평가": {"_ITEM": {"_R": frozenset()}},
+        "세부첨삭": {
+            "_ITEM": {
+                "_R": frozenset({"문항_질문_번호", "원본", "유형", "내용"}),
+            },
+        },
+    },
+}
+
+# -- 최상위 스키마 (TASK별) --
+_TOP_REQUIRED = frozenset({
+    "data_id", "data_file", "data_title", "data_source",
+    "category_main", "category_sub", "data_type", "collected_date",
+    "content",
+})
+
+_TOP_SCHEMA_TASK1: _SchemaNode = {
+    "_R": _TOP_REQUIRED,
+    "content_meta": _CONTENT_META_SCHEMA,
+    "add_info": _TASK1_ADD_INFO_SCHEMA,
+}
+
+_TOP_SCHEMA_TASK2: _SchemaNode = {
+    "_R": _TOP_REQUIRED | frozenset({"add_info"}),
+    "content_meta": _CONTENT_META_SCHEMA,
+    "add_info": _TASK2_ADD_INFO_SCHEMA,
+}
+
+_TOP_SCHEMA_TASK3: _SchemaNode = {
+    "_R": _TOP_REQUIRED | frozenset({"add_info"}),
+    "content_meta": _CONTENT_META_SCHEMA,
+    "add_info": _TASK3_ADD_INFO_SCHEMA,
+}
+
+
+def _apply_sub(value: Any, sub_schema: _SchemaNode | None) -> Any:
+    """하위 스키마를 value에 적용한다."""
+    if sub_schema is None:
+        return value
+
+    if "_ITEM" in sub_schema and isinstance(value, list):
+        item_schema: _SchemaNode = sub_schema["_ITEM"]
+        processed: list[Any] = []
+        for item in value:
+            if isinstance(item, dict):
+                stripped = _strip_with_schema(item, item_schema)
+                if stripped:
+                    processed.append(stripped)
+            else:
+                processed.append(item)
+        return processed
+
+    if isinstance(value, dict):
+        return _strip_with_schema(value, sub_schema)
+
+    return value
+
+
+def _strip_with_schema(
+    data: dict[str, Any], schema: _SchemaNode,
+) -> dict[str, Any]:
+    """스키마 기반 재귀 strip — 필수 키 보존, 선택 키 빈값 제거."""
+    required: frozenset[str] | str = schema.get("_R", frozenset())
+    all_required = required == "*"
+
+    cleaned: dict[str, Any] = {}
+    for k, v in data.items():
+        if k in _INTERNAL_KEYS:
+            cleaned[k] = v
+            continue
+
+        sub = schema.get(k) or schema.get("*")
+        is_req = all_required or (
+            isinstance(required, frozenset) and k in required
+        )
+
+        if is_req:
+            cleaned[k] = _apply_sub(v, sub)
+        else:
+            stripped = _apply_sub(v, sub) if sub else _strip_empty_values(v)
+            if not _is_empty(stripped):
+                cleaned[k] = stripped
+
+    return cleaned
+
+
+def strip_row(row: dict[str, Any]) -> dict[str, Any]:
+    """JSONL row를 TASK 유형에 맞는 스키마로 strip한다.
+
+    - 필수 필드: 빈 값이어도 보존
+    - 선택 필드: 빈 값이면 제거
+    """
+    if not isinstance(row, dict):
+        return row
+
+    add_info = row.get("add_info")
+    if isinstance(add_info, dict) and "논제" in add_info:
+        topic = add_info.get("논제")
+        if isinstance(topic, dict) and "문항" in topic:
+            schema = _TOP_SCHEMA_TASK3
+        else:
+            schema = _TOP_SCHEMA_TASK2
+    else:
+        schema = _TOP_SCHEMA_TASK1
+
+    return _strip_with_schema(row, schema)
+
+
 PIPELINE_CHUNK_SIZE = 500
 
 EDITABLE_FIELDS = {"content", "content_meta", "add_info"}
@@ -278,7 +467,7 @@ class GCSEditService:
                 row.pop("_version", None)
                 row.pop("_last_edited_by", None)
                 row.pop("_last_edited_at", None)
-                row = _strip_empty_values(row)
+                row = strip_row(row)
                 result_lines.append(json.dumps(row, ensure_ascii=False))
             return "\n".join(result_lines) + "\n", len(result_lines)
 
@@ -348,7 +537,7 @@ class GCSEditService:
         warning_items: list[dict[str, Any]] = []
 
         for idx_str in sorted(all_rows.keys(), key=int):
-            row = _strip_empty_values(json.loads(all_rows[idx_str]))
+            row = strip_row(json.loads(all_rows[idx_str]))
             vr = validate_row_safe(row)
             if vr.errors:
                 error_items.append(
