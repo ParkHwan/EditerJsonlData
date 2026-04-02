@@ -37,7 +37,7 @@ from app.services.audit_service import audit_service
 from app.services.auth_service import AuthService
 from app.services.draft_service import DraftService
 from app.services.file_service import file_service
-from app.services.gcs_edit_service import gcs_edit_service
+from app.services.gcs_edit_service import _strip_empty_values, gcs_edit_service
 from app.services.lock_service import LockService
 from app.services.metadata_service import metadata_service
 from app.services.websocket_manager import ws_manager
@@ -263,7 +263,7 @@ async def save_data(
             metadata={"mode": "gcs_redis" if is_gcs else "local"},
         )
 
-        vr = validate_row_safe(updated_data)
+        vr = validate_row_safe(_strip_empty_values(updated_data))
         validation_warnings = vr.warnings if vr.warnings else []
 
         if is_gcs:

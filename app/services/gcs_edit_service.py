@@ -28,6 +28,44 @@ from app.services.gcs_service import gcs_service
 
 WORKING_COPY_PREFIX = "gcs_wc"
 WORKING_COPY_TTL = 86400  # 24시간
+
+# 내부 메타 키 — strip 대상에서 제외
+_INTERNAL_KEYS = {"_version", "_last_edited_by", "_last_edited_at", "row_idx", "file_id"}
+
+
+def _is_empty(value: Any) -> bool:
+    """빈 값 판별: None, "", [], {} → True"""
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip() == "":
+        return True
+    if isinstance(value, (list, dict)) and len(value) == 0:
+        return True
+    return False
+
+
+def _strip_empty_values(data: Any) -> Any:
+    """dict/list를 재귀 순회하며 빈 값인 키를 제거한다.
+
+    - dict: 빈 값인 키 제거, 내부 dict/list는 재귀 정리 후 결과가 비면 제거
+    - list: 각 요소를 재귀 정리, 빈 요소는 유지 (인덱스 보존)
+    - 내부 메타 키(_version 등)는 건드리지 않는다.
+    """
+    if isinstance(data, dict):
+        cleaned: dict[str, Any] = {}
+        for k, v in data.items():
+            if k in _INTERNAL_KEYS:
+                cleaned[k] = v
+                continue
+            stripped = _strip_empty_values(v)
+            if not _is_empty(stripped):
+                cleaned[k] = stripped
+        return cleaned
+    if isinstance(data, list):
+        return [_strip_empty_values(item) for item in data]
+    return data
+
+
 PIPELINE_CHUNK_SIZE = 500
 
 EDITABLE_FIELDS = {"content", "content_meta", "add_info"}
@@ -240,6 +278,7 @@ class GCSEditService:
                 row.pop("_version", None)
                 row.pop("_last_edited_by", None)
                 row.pop("_last_edited_at", None)
+                row = _strip_empty_values(row)
                 result_lines.append(json.dumps(row, ensure_ascii=False))
             return "\n".join(result_lines) + "\n", len(result_lines)
 
@@ -309,7 +348,7 @@ class GCSEditService:
         warning_items: list[dict[str, Any]] = []
 
         for idx_str in sorted(all_rows.keys(), key=int):
-            row = json.loads(all_rows[idx_str])
+            row = _strip_empty_values(json.loads(all_rows[idx_str]))
             vr = validate_row_safe(row)
             if vr.errors:
                 error_items.append(
