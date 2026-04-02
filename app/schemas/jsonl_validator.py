@@ -126,6 +126,63 @@ def _check_list_of_dicts(
     return [item for item in val if isinstance(item, dict)]
 
 
+def _check_list_of_type(
+    data: dict[str, Any],
+    key: str,
+    item_type: type,
+    path: str,
+    result: ValidationResult,
+    *,
+    required: bool = True,
+) -> None:
+    """list 필드의 각 value가 특정 타입(int, str 등)인지 검사."""
+    if key not in data:
+        if required:
+            result.add_error(f"{path}.{key}: 필수 필드 누락")
+        return
+
+    val = data[key]
+    if not isinstance(val, list):
+        result.add_error(
+            f"{path}.{key}: list 타입이어야 합니다 (현재: {type(val).__name__})"
+        )
+        return
+
+    type_name = item_type.__name__
+    for i, item in enumerate(val):
+        if item_type is int:
+            if not isinstance(item, int) or isinstance(item, bool):
+                result.add_warning(
+                    f"{path}.{key}[{i}]: {type_name} 타입이어야 합니다 "
+                    f"(현재: {type(item).__name__})"
+                )
+        elif not isinstance(item, item_type):
+            result.add_warning(
+                f"{path}.{key}[{i}]: {type_name} 타입이어야 합니다 "
+                f"(현재: {type(item).__name__})"
+            )
+
+
+# (필드명, 기대타입, 필수여부)
+FieldSpec = tuple[str, type | tuple[type, ...], bool]
+
+
+def _validate_list_dict_fields(
+    items: list[dict[str, Any]],
+    path: str,
+    result: ValidationResult,
+    field_specs: list[FieldSpec],
+) -> None:
+    """list[dict] 내 각 dict의 필수/선택 필드를 검증한다."""
+    for i, item in enumerate(items):
+        item_path = f"{path}[{i}]"
+        for field_name, expected_type, is_required in field_specs:
+            if is_required:
+                _check_required_field(item, field_name, expected_type, item_path, result)
+            else:
+                _check_optional_field(item, field_name, expected_type, item_path, result)
+
+
 # ──────────────────────────────────────────────
 # 공통 최상위 필드 검증
 # ──────────────────────────────────────────────
@@ -156,6 +213,10 @@ def _validate_content_meta(
         _check_required_str(tag_data, "type", tag_path, result)
         _check_required_str(tag_data, "info", tag_path, result)
         _check_required_field(tag_data, "tag_properties", dict, tag_path, result)
+        if isinstance(tag_data.get("tag_properties"), dict):
+            tp = tag_data["tag_properties"]
+            tp_path = f"{tag_path}.tag_properties"
+            _check_list_of_type(tp, "page_num", int, tp_path, result, required=False)
 
         if "img_size" in tag_data and isinstance(tag_data["img_size"], dict):
             img_path = f"{tag_path}.img_size"
@@ -180,7 +241,7 @@ def _validate_task1_add_info(
     add_info: dict[str, Any], result: ValidationResult,
 ) -> None:
     path = "add_info"
-    _check_required_field(add_info, "page_num", list, path, result)
+    _check_list_of_type(add_info, "page_num", int, path, result, required=True)
     _check_required_str(add_info, "source_file", path, result)
 
     if "book_meta" in add_info:
@@ -220,7 +281,7 @@ def _validate_task1_add_info(
         if not isinstance(add_info["풀이"], dict):
             result.add_error(f"{path}.풀이: dict 타입이어야 합니다")
 
-    _check_optional_field(add_info, "add_images", list, path, result)
+    _check_list_of_type(add_info, "add_images", str, path, result, required=False)
 
 
 # ──────────────────────────────────────────────
@@ -259,9 +320,31 @@ def _validate_task2_add_info(
     if isinstance(add_info.get("교사첨삭"), dict):
         tc = add_info["교사첨삭"]
         tc_path = f"{path}.교사첨삭"
-        _check_list_of_dicts(tc, "총평가", tc_path, result, required=True)
-        _check_list_of_dicts(tc, "세부평가", tc_path, result, required=False)
-        _check_list_of_dicts(tc, "세부첨삭", tc_path, result, required=True)
+
+        items = _check_list_of_dicts(tc, "총평가", tc_path, result, required=True)
+        if items:
+            _validate_list_dict_fields(items, f"{tc_path}.총평가", result, [
+                ("유형", str, True),
+                ("내용", str, True),
+                ("항목", str, False),
+            ])
+
+        items = _check_list_of_dicts(tc, "세부평가", tc_path, result, required=False)
+        if items:
+            _validate_list_dict_fields(items, f"{tc_path}.세부평가", result, [
+                ("항목", str, False),
+                ("기준", list, False),
+                ("결과", str, False),
+                ("원본기준", list, False),
+            ])
+
+        items = _check_list_of_dicts(tc, "세부첨삭", tc_path, result, required=True)
+        if items:
+            _validate_list_dict_fields(items, f"{tc_path}.세부첨삭", result, [
+                ("원본", str, True),
+                ("유형", list, True),
+                ("내용", str, True),
+            ])
 
 
 # ──────────────────────────────────────────────
@@ -287,7 +370,13 @@ def _validate_task3_add_info(
             m = t["문항"]
             m_path = f"{t_path}.문항"
             _check_optional_field(m, "지문", str, m_path, result)
-            _check_list_of_dicts(m, "질문", m_path, result, required=True)
+            items = _check_list_of_dicts(m, "질문", m_path, result, required=True)
+            if items:
+                _validate_list_dict_fields(items, f"{m_path}.질문", result, [
+                    ("번호", str, True),
+                    ("본문", str, True),
+                    ("배점", str, False),
+                ])
 
     _check_required_field(add_info, "논제분석", dict, path, result)
     if isinstance(add_info.get("논제분석"), dict):
@@ -295,29 +384,65 @@ def _validate_task3_add_info(
         a_path = f"{path}.논제분석"
         _check_optional_field(a, "해설", str, a_path, result)
         if isinstance(a.get("예시답안"), dict):
-            _check_list_of_dicts(
+            items = _check_list_of_dicts(
                 a["예시답안"], "문항_질문",
                 f"{a_path}.예시답안", result, required=False,
             )
+            if items:
+                _validate_list_dict_fields(items, f"{a_path}.예시답안.문항_질문", result, [
+                    ("번호", str, False),
+                    ("답안", str, False),
+                ])
         if isinstance(a.get("평가기준"), dict):
-            _check_list_of_dicts(
+            items = _check_list_of_dicts(
                 a["평가기준"], "문항_질문",
                 f"{a_path}.평가기준", result, required=False,
             )
+            if items:
+                _validate_list_dict_fields(items, f"{a_path}.평가기준.문항_질문", result, [
+                    ("번호", str, False),
+                    ("내용", str, False),
+                ])
 
     _check_required_field(add_info, "학생답안", dict, path, result)
     if isinstance(add_info.get("학생답안"), dict):
-        _check_list_of_dicts(
+        items = _check_list_of_dicts(
             add_info["학생답안"], "문항_질문",
             f"{path}.학생답안", result, required=True,
         )
+        if items:
+            _validate_list_dict_fields(items, f"{path}.학생답안.문항_질문", result, [
+                ("번호", str, True),
+                ("답안", str, True),
+            ])
 
     _check_required_field(add_info, "교사첨삭", dict, path, result)
     if isinstance(add_info.get("교사첨삭"), dict):
         tc = add_info["교사첨삭"]
         tc_path = f"{path}.교사첨삭"
-        _check_list_of_dicts(tc, "평가", tc_path, result, required=False)
-        _check_list_of_dicts(tc, "세부첨삭", tc_path, result, required=True)
+
+        items = _check_list_of_dicts(tc, "평가", tc_path, result, required=False)
+        if items:
+            _validate_list_dict_fields(items, f"{tc_path}.평가", result, [
+                ("평가유형", str, False),
+                ("문항_질문_번호", str, False),
+                ("항목", str, False),
+                ("유형", str, False),
+                ("기준", list, False),
+                ("결과", str, False),
+                ("내용", str, False),
+                ("원본기준", (str, list), False),
+            ])
+
+        items = _check_list_of_dicts(tc, "세부첨삭", tc_path, result, required=True)
+        if items:
+            _validate_list_dict_fields(items, f"{tc_path}.세부첨삭", result, [
+                ("문항_질문_번호", str, True),
+                ("원본", str, True),
+                ("유형", str, True),
+                ("내용", str, True),
+                ("첨삭본문이미지", str, False),
+            ])
 
 
 # ──────────────────────────────────────────────
