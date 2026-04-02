@@ -197,7 +197,6 @@ def _validate_top_level(row: dict[str, Any], result: ValidationResult) -> None:
     for key in _TOP_LEVEL_REQUIRED_STR:
         _check_required_str(row, key, "row", result)
     _check_required_field(row, "data_type", list, "row", result)
-    _check_required_field(row, "content", (str, dict), "row", result)
 
 
 def _validate_content_meta(
@@ -476,6 +475,14 @@ def validate_row(row: dict[str, Any]) -> ValidationResult:
 
     _validate_top_level(row, result)
 
+    add_info = row.get("add_info")
+    task_type = _detect_task_type(add_info) if isinstance(add_info, dict) else "task1"
+
+    if task_type == "task1":
+        _check_required_field(row, "content", (str, dict), "row", result)
+    else:
+        _check_optional_field(row, "content", str, "row", result)
+
     cm = row.get("content_meta")
     if cm is not None:
         if isinstance(cm, dict):
@@ -483,13 +490,11 @@ def validate_row(row: dict[str, Any]) -> ValidationResult:
         else:
             result.add_error("content_meta: dict 타입이어야 합니다")
 
-    add_info = row.get("add_info")
     if add_info is not None:
         if not isinstance(add_info, dict):
             result.add_error("add_info: dict 타입이어야 합니다")
             return result
 
-        task_type = _detect_task_type(add_info)
         if task_type == "task1":
             _validate_task1_add_info(add_info, result)
         elif task_type == "task2":
