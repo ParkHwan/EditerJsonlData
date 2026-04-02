@@ -3,7 +3,7 @@
  */
 import { FILE_ID, API_V1_STR, EDIT_MODE, GCS_DATE, GCS_TASK } from './config.js';
 import { state } from './state.js';
-import { csrfFetch, showToast } from './api.js';
+import { csrfFetch, showToast, showValidationPanel } from './api.js';
 import { updateFileLockUI } from './lock.js';
 
 export async function publishToGCS() {
@@ -35,14 +35,35 @@ export async function publishToGCS() {
             if (state.lockStatusManager) { state.lockStatusManager.disconnect(); }
             window.removeEventListener('beforeunload', window._beforeUnloadGuard);
             showToast(data.message || 'GCS 파일 업데이트 완료!', 'success');
+
+            const svrWarnings = data.validation_warnings || [];
+            if (svrWarnings.length > 0) {
+                showValidationPanel({
+                    title: '스키마 검증 경고 (Publish 완료)',
+                    warnings: svrWarnings,
+                });
+            }
+
             const taskParam = GCS_TASK ? `?task=${GCS_TASK}` : '';
             const backUrl = GCS_DATE
                 ? `${API_V1_STR}/gcs/browse/${GCS_DATE}${taskParam}`
                 : `${API_V1_STR}/gcs/browse${taskParam}`;
-            setTimeout(() => { window.location.href = backUrl; }, 1000);
+            setTimeout(() => { window.location.href = backUrl; }, svrWarnings.length > 0 ? 5000 : 1000);
         } else {
             if (btn) { btn.disabled = false; btn.textContent = 'GCS 파일 업데이트'; }
-            showToast(data.detail || 'GCS 파일 업데이트 실패', 'error');
+
+            const detail = data.detail;
+            if (detail && typeof detail === 'object' && detail.validation_errors) {
+                showToast(detail.message || '스키마 검증 실패', 'error');
+                showValidationPanel({
+                    title: '스키마 검증 실패 — GCS 업데이트 차단',
+                    errors: detail.validation_errors,
+                    warnings: detail.validation_warnings || [],
+                    summary: detail.summary || '',
+                });
+            } else {
+                showToast(typeof detail === 'string' ? detail : (detail?.message || 'GCS 파일 업데이트 실패'), 'error');
+            }
         }
     } catch (e) {
         if (btn) { btn.disabled = false; btn.textContent = 'GCS 파일 업데이트'; }
