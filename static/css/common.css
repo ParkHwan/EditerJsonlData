@@ -596,6 +596,37 @@ table.info-table td {
 .theme-amber .list-item-idx { background: #ffa000; color: #fff; }
 .theme-amber .info-table th { background: #fff8e1; color: #f57f17; }
 
+/* ── 리스트 아이템 이동 하이라이트 ── */
+.list-item-card.list-item-moved {
+    border: 2px solid #1976D2;
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.2), 0 4px 12px rgba(25, 118, 210, 0.15);
+    animation: listItemMovePulse 0.6s ease-out;
+    position: relative;
+}
+.list-item-card.list-item-moved .list-item-header {
+    position: relative;
+}
+.list-item-card.list-item-moved .list-item-header::after {
+    content: '이동됨';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    background: #1976D2;
+    padding: 2px 8px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+}
+@keyframes listItemMovePulse {
+    0%   { box-shadow: 0 0 0 0 rgba(25, 118, 210, 0.5); }
+    50%  { box-shadow: 0 0 0 6px rgba(25, 118, 210, 0.2), 0 4px 16px rgba(25, 118, 210, 0.25); }
+    100% { box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.2), 0 4px 12px rgba(25, 118, 210, 0.15); }
+}
+
 /* ── 세부첨삭 특수 필드 하이라이트 ── */
 .field-highlight-yellow { background: #fff8e1 !important; border-left: 3px solid #ffb74d; }
 .field-highlight-blue { background: #e3f2fd !important; border-left: 3px solid #42a5f5; }

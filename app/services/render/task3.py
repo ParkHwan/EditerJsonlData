@@ -306,6 +306,11 @@ def render_task3_card(
     )
     html += '<div class="section-body"><table class="info-table">'
     html += (
+        '<tr><th>pairIDX</th>'
+        f'<td style="font-family:monospace;font-size:12px;">'
+        f'{escape_html(pair_idx)}</td></tr>'
+    )
+    html += (
         '<tr><th>source_file</th>'
         '<td class="editable-value" data-field="add_info.source_file"'
         f' style="font-family:monospace;font-size:12px;">{escape_html(source_file)}</td></tr>'

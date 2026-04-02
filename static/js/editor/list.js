@@ -20,6 +20,48 @@ export function toggleSection(header) {
     }
 }
 
+function _showListKeyInputDialog(message, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.className = 'key-input-overlay';
+    overlay.innerHTML = `
+        <div class="key-input-dialog">
+            <h4>${escapeHtml(message)}</h4>
+            <input type="text" id="listKeyInputField" placeholder="키 이름 입력" autocomplete="off" />
+            <div class="dialog-actions">
+                <button class="btn-dialog-cancel" id="listKeyInputCancel">취소</button>
+                <button class="btn-dialog-ok" id="listKeyInputOk">확인</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#listKeyInputField');
+    const btnOk = overlay.querySelector('#listKeyInputOk');
+    const btnCancel = overlay.querySelector('#listKeyInputCancel');
+
+    input.focus();
+
+    function submit() {
+        const value = input.value.trim();
+        overlay.remove();
+        if (value) onConfirm(value);
+    }
+
+    function close() {
+        overlay.remove();
+    }
+
+    btnOk.addEventListener('click', submit);
+    btnCancel.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close();
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.isComposing) submit();
+        if (e.key === 'Escape') close();
+    });
+}
+
 function _buildFieldHtml(fieldKey, fieldPath, listPath) {
     const ft = getListFieldType(listPath, fieldKey);
     if (ft && (ft.type === 'array' || ft.type === 'dict')) {
@@ -95,26 +137,24 @@ export function addListItemKey(btnEl, listPath) {
     if (!table) return;
     const idx = itemCard.dataset.listIndex;
 
-    const key = prompt('추가할 키 이름을 입력하세요');
-    if (!key || !key.trim()) return;
-    const keyName = key.trim();
+    _showListKeyInputDialog('추가할 키 이름을 입력하세요', (keyName) => {
+        const existing = table.querySelector(`tr[data-key="${CSS.escape(keyName)}"]`);
+        if (existing && !existing.classList.contains('pending-delete')) {
+            alert(`'${keyName}' 키가 이미 존재합니다.`);
+            return;
+        }
 
-    const existing = table.querySelector(`tr[data-key="${CSS.escape(keyName)}"]`);
-    if (existing && !existing.classList.contains('pending-delete')) {
-        alert(`'${keyName}' 키가 이미 존재합니다.`);
-        return;
-    }
+        const fieldPath = `${listPath}.${idx}.${keyName}`;
+        const html = _buildFieldHtml(keyName, fieldPath, listPath);
+        table.insertAdjacentHTML('beforeend', html);
 
-    const fieldPath = `${listPath}.${idx}.${keyName}`;
-    const html = _buildFieldHtml(keyName, fieldPath, listPath);
-    table.insertAdjacentHTML('beforeend', html);
+        const newRow = table.lastElementChild;
+        const ta = newRow.querySelector('.inline-edit-ta');
+        if (ta) attachJsonValidator(ta);
 
-    const newRow = table.lastElementChild;
-    const ta = newRow.querySelector('.inline-edit-ta');
-    if (ta) attachJsonValidator(ta);
-
-    state.modifiedLists.add(listPath);
-    showToast(`'${keyName}' 키가 추가되었습니다`, 'success');
+        state.modifiedLists.add(listPath);
+        showToast(`'${keyName}' 키가 추가되었습니다`, 'success');
+    });
 }
 
 export function deleteListItemKey(btnEl) {
@@ -162,11 +202,22 @@ export function moveListItem(listPath, index, direction, btnEl) {
 
     const currentIdx = items.indexOf(itemCard);
 
+    let moved = false;
     if (direction === 'up' && currentIdx > 0) {
         container.insertBefore(itemCard, items[currentIdx - 1]);
+        moved = true;
     } else if (direction === 'down' && currentIdx < items.length - 1) {
         const next = items[currentIdx + 1];
         container.insertBefore(next, itemCard);
+        moved = true;
+    }
+
+    if (moved) {
+        container.querySelectorAll('.list-item-card').forEach(c => c.classList.remove('list-item-moved'));
+        itemCard.classList.add('list-item-moved');
+        itemCard.style.animation = 'none';
+        void itemCard.offsetHeight;
+        itemCard.style.animation = '';
     }
 
     _renumberListItems(container);
@@ -178,7 +229,6 @@ export function _renumberListItems(container) {
     items.forEach((card, i) => {
         const idx = card.querySelector('.list-item-idx');
         if (idx) idx.textContent = i + 1;
-        card.dataset.listIndex = i;
     });
 }
 

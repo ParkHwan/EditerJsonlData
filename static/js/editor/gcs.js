@@ -32,14 +32,21 @@ export async function publishToGCS() {
             state.fileLockOwner = null;
             updateFileLockUI();
             if (state.heartbeatInterval) { clearInterval(state.heartbeatInterval); state.heartbeatInterval = null; }
+            if (state.lockStatusManager) { state.lockStatusManager.disconnect(); }
+            window.removeEventListener('beforeunload', window._beforeUnloadGuard);
             showToast(data.message || 'GCS 파일 업데이트 완료!', 'success');
+            const taskParam = GCS_TASK ? `?task=${GCS_TASK}` : '';
+            const backUrl = GCS_DATE
+                ? `${API_V1_STR}/gcs/browse/${GCS_DATE}${taskParam}`
+                : `${API_V1_STR}/gcs/browse${taskParam}`;
+            setTimeout(() => { window.location.href = backUrl; }, 1000);
         } else {
+            if (btn) { btn.disabled = false; btn.textContent = 'GCS 파일 업데이트'; }
             showToast(data.detail || 'GCS 파일 업데이트 실패', 'error');
         }
     } catch (e) {
-        showToast('GCS 업데이트 오류: ' + e.message, 'error');
-    } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'GCS 파일 업데이트'; }
+        showToast('GCS 업데이트 오류: ' + e.message, 'error');
     }
 }
 
