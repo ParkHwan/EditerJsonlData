@@ -162,17 +162,19 @@ class GCSService:
             folders: list[dict[str, str]] = []
             for p in sorted(iterator.prefixes, reverse=True):
                 folder_name = p.rstrip("/").split("/")[-1]
+                # 날짜 폴더 이외에도 조회되도록 수정
+                display = folder_name
                 if folder_name.isdigit() and len(folder_name) == 8:
                     try:
                         dt = datetime.strptime(folder_name, "%Y%m%d")
                         display = dt.strftime("%Y-%m-%d")
                     except ValueError:
                         display = folder_name
-                    folders.append({
-                        "name": folder_name,
-                        "display": display,
-                        "prefix": p,
-                    })
+                folders.append({
+                    "name": folder_name,
+                    "display": display,
+                    "prefix": p,
+                })
             return folders
 
         result = await asyncio.to_thread(_list)

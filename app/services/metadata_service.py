@@ -30,10 +30,22 @@ def _extract_task_id(gcs_path: str) -> str:
 
 
 def _extract_date_folder(gcs_path: str) -> str:
-    """GCS 경로에서 YYYYMMDD 날짜 폴더를 추출."""
-    match = re.search(r"/(\d{8})/", gcs_path)
-    return match.group(1) if match else ""
-
+    """
+        v0. GCS 경로에서 YYYYMMDD 날짜 폴더를 추출.
+        v1. 날짜 폴더 이외에도 조회되도록 수정
+    
+    """
+    # match = re.search(r"/(\d{8})/", gcs_path)
+    # return match.group(1) if match else ""
+    for tid, info in settings.GCS_TASKS.items():
+        prefix = info["prefix"]
+        if not prefix.endswith("/"):
+            prefix += "/"
+        if gcs_path.startswith(prefix):
+            remainder = gcs_path[len(prefix):]
+            if "/" in remainder:
+                return remainder.split("/")[0]
+    return ""
 
 class MetadataService:
     """DuckDB 기반 파일 메타데이터 / 이벤트 서비스"""

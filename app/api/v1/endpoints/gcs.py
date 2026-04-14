@@ -24,6 +24,7 @@ import asyncio
 import hmac
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 _DOWNLOAD_SEMAPHORE: asyncio.Semaphore | None = None
 
@@ -224,7 +225,7 @@ async def gcs_browse_date(
     current_user: dict[str, Any] | None = Depends(get_optional_user),
     lock_service: LockService = Depends(get_lock_service),
 ):
-    """특정 날짜 폴더 내 파일 목록 — DuckDB-first
+    """특정 폴더 내 파일 목록 — DuckDB-first
 
     오늘 해당 (task, date_folder)가 미동기화이면 GCS에서 가져와 DuckDB에 upsert 후 서빙.
     이미 동기화된 경우 DuckDB에서 바로 서빙 (GCS 호출 없음).
@@ -234,10 +235,19 @@ async def gcs_browse_date(
 
         return RedirectResponse(url=f"{settings.API_V1_STR}/view/login")
 
-    safe_date = Path(date_str).name
-    if not safe_date.isdigit() or len(safe_date) != 8:
-        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYYMMDD)")
-
+    # path traversal 방지
+    if ".." in date_str:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    
+    # Path().name 대신 date_str 그대로 사용하되 leading/trailing slash만 정리
+    safe_date = date_str.strip("/")
+    if not safe_date:
+        raise HTTPException(status_code=400, detail="Invalid folder name") or len(safe_date) != 8
+    #     raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYYMMDD)")
+    # v1. 날짜 폴더 이외에도 조회되도록 수정
+    if not safe_date:
+        raise HTTPException(status_code=400, detail="Invalid folder name")
+        
     task_name = ""
     if task and task in settings.GCS_TASKS:
         task_name = settings.GCS_TASKS[task]["name"]
@@ -312,7 +322,7 @@ async def gcs_browse_date(
         {
             "files": files,
             "date_str": safe_date,
-            "date_display": f"{safe_date[:4]}-{safe_date[4:6]}-{safe_date[6:8]}",
+            "date_display": f"{safe_date[:4]}-{safe_date[4:6]}-{safe_date[6:8]}" if safe_date.isdigit() and len(safe_date) == 8 else safe_date,
             "gcs_error": gcs_error,
             "current_user": current_user,
             "csrf_token": csrf_token,
@@ -349,8 +359,11 @@ async def api_list_files(
     date_str: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """특정 날짜 폴더 내 파일 목록 (JSON)"""
-    safe_date = Path(date_str).name
+    """특정 폴더 내 파일 목록 (JSON)"""
+    if ".." in date_str:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    
+    safe_date = date_str.strip("/")
     try:
         files = await gcs_service.list_files(safe_date)
         return {"files": files, "date": safe_date}
@@ -385,9 +398,9 @@ async def api_download(
     file_id = local_path.stem
     file_service._invalidate_index(file_id)
 
-    # GCS 경로에서 date_str 추출 후 메타데이터 저장 (Phase 6-1)
-    parts = body.gcs_path.strip("/").split("/")
-    date_str = parts[1] if len(parts) >= 3 else ""
+    # GCS 경로에서 date_str 동적 추출 후 메타데이터 저장 (Phase 6-1)
+    from app.services.metadata_service import _extract_date_folder
+    date_str = _extract_date_folder(body.gcs_path)
     if date_str:
         gcs_service.save_file_metadata(file_id, date_str, body.gcs_path)
 
@@ -420,7 +433,6 @@ async def download_file(
 ):
     """GCS JSONL 파일을 브라우저로 직접 다운로드 (StreamingResponse)"""
     import io
-    from urllib.parse import quote
 
     try:
         blob_bytes = await gcs_service.download_blob_bytes(gcs_path)
@@ -465,12 +477,12 @@ async def download_jsonl_info(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     """JSONL 다운로드 사전 검증 — 파일 수, 총 용량 반환"""
-    safe_date = Path(date_str).name
-    if not safe_date.isdigit() or len(safe_date) != 8:
-        raise HTTPException(
-            status_code=400,
-            detail="날짜 형식이 올바르지 않습니다 (YYYYMMDD)",
-        )
+    if ".." in date_str:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    
+    safe_date = date_str.strip("/")
+    if not safe_date:
+        raise HTTPException(status_code=400, detail="Invalid folder name")
 
     try:
         files = await gcs_service.list_all_blobs(
@@ -496,15 +508,17 @@ async def download_jsonl_all(
     task: str = "",
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """날짜 폴더 내 JSONL 파일을 비동기 병렬 다운로드 → 인메모리 ZIP → 응답"""
+    """특정 폴더 내 JSONL 파일을 비동기 병렬 다운로드 → 인메모리 ZIP → 응답"""
     import io
     import time
     import zipfile
-    from urllib.parse import quote
 
-    safe_date = Path(date_str).name
-    if not safe_date.isdigit() or len(safe_date) != 8:
-        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYYMMDD)")
+    if ".." in date_str:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    
+    safe_date = date_str.strip("/")
+    if not safe_date:
+        raise HTTPException(status_code=400, detail="Invalid folder name")
 
     task_label = task or "all"
     zip_filename = f"{task_label}_{safe_date}_jsonl.zip"
@@ -781,7 +795,7 @@ async def proxy_gcs_image(
     gcs_prefix는 GCS 내 이미지의 전체 상대 경로.
     예: manual/PROJ-14768/TASK1/20260311/images/EPT_1029/image/tag_10006_01.png
     """
-    if ".." in gcs_prefix or gcs_prefix.startswith("/"):
+    if not gcs_prefix or ".." in gcs_prefix or gcs_prefix.startswith("/"):
         raise HTTPException(status_code=400, detail="잘못된 이미지 경로")
 
     gcs_path = gcs_prefix
@@ -799,14 +813,21 @@ async def proxy_gcs_image(
     except NotFound:
         raise HTTPException(status_code=404, detail=f"이미지를 찾을 수 없습니다: {gcs_prefix}")
     except GoogleCloudError as e:
+        logger.error("GCS 이미지 로드 실패 (GCS 에러): path=%s, error=%s", gcs_path, e)
         raise HTTPException(status_code=502, detail=f"GCS 이미지 로드 실패: {e}")
+    except Exception as e:
+        logger.exception("GCS 이미지 프록시 중 예외 발생: path=%s", gcs_path)
+        raise HTTPException(status_code=500, detail=f"이미지 서빙 중 서버 오류: {e}")
+
+    # X-GCS-Path 헤더에 한글 등 비ASCII 문자가 포함될 경우 500 에러가 발생하므로 quote 처리
+    safe_gcs_path = quote(gcs_path)
 
     return Response(
         content=data,
         media_type=content_type,
         headers={
             "Cache-Control": "public, max-age=86400",
-            "X-GCS-Path": gcs_path,
+            "X-GCS-Path": safe_gcs_path,
         },
     )
 
