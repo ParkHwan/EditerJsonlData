@@ -16,7 +16,7 @@ export function moveKeyUp(sectionPath, key) {
     if (!table) return;
     const row = table.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
     if (!row || !row.previousElementSibling) return;
-    table.insertBefore(row, row.previousElementSibling);
+    row.parentNode.insertBefore(row, row.previousElementSibling);
     trackSectionOrder(sectionPath, sectionBlock);
 }
 
@@ -29,7 +29,7 @@ export function moveKeyDown(sectionPath, key) {
     if (!table) return;
     const row = table.querySelector(`tr[data-key="${CSS.escape(key)}"]`);
     if (!row || !row.nextElementSibling) return;
-    table.insertBefore(row.nextElementSibling, row);
+    row.parentNode.insertBefore(row.nextElementSibling, row);
     trackSectionOrder(sectionPath, sectionBlock);
 }
 
@@ -188,7 +188,7 @@ export function addKeyToSection(sectionPath) {
         }
 
         state.addedKeys.set(fieldPath, '');
-        table.appendChild(tr);
+        (table.tBodies[0] || table).appendChild(tr);
 
         if (useTextarea) {
             const ta = tr.querySelector('.inline-edit-ta');

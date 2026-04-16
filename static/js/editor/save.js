@@ -227,7 +227,7 @@ export async function cancelEdit() {
             const origKeys = Object.keys(origData);
             for (const k of origKeys) {
                 const row = table.querySelector(`tr[data-key="${CSS.escape(k)}"]`);
-                if (row) table.appendChild(row);
+                if (row) row.parentNode.appendChild(row);
             }
         }
 
