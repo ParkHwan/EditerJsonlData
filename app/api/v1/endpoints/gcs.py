@@ -238,13 +238,8 @@ async def gcs_browse_date(
     # path traversal 방지
     if ".." in date_str:
         raise HTTPException(status_code=400, detail="Invalid path")
-    
-    # Path().name 대신 date_str 그대로 사용하되 leading/trailing slash만 정리
+
     safe_date = date_str.strip("/")
-    if not safe_date:
-        raise HTTPException(status_code=400, detail="Invalid folder name") or len(safe_date) != 8
-    #     raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYYMMDD)")
-    # v1. 날짜 폴더 이외에도 조회되도록 수정
     if not safe_date:
         raise HTTPException(status_code=400, detail="Invalid folder name")
         

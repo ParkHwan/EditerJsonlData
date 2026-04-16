@@ -40,8 +40,8 @@
     {% else %}
     <div class="gcs-empty">
         {% if not gcs_error %}
-        해당 TASK에 날짜 폴더가 없습니다.
-        <br><small><code>{{ task_prefix }}/YYYYMMDD/</code> 형식으로 파일을 업로드해주세요.</small>
+        해당 TASK에 폴더가 없습니다.
+        <br><small><code>{{ task_prefix }}/&lt;폴더명&gt;/</code> 경로에 파일을 업로드해주세요.</small>
         {% endif %}
     </div>
     {% endif %}

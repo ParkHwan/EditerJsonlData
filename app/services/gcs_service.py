@@ -144,7 +144,7 @@ class GCSService:
     # 날짜 폴더 목록 조회
     # ------------------------------------------------------------------
     async def list_date_folders(self, task_id: str = "") -> list[dict[str, str]]:
-        """GCS 하위의 날짜 폴더(YYYYMMDD) 목록 조회 (30분 캐시)"""
+        """GCS 하위 폴더 목록 조회 (30분 캐시). YYYYMMDD 형식은 날짜로 표시, 그 외는 원본명 표시."""
         cache_key = f"gcs_cache:folders:{task_id or '_all'}"
         cached = await self._get_cache(cache_key)
         if cached is not None:
@@ -187,10 +187,10 @@ class GCSService:
     async def list_files(
         self, date_str: str = "", task_id: str = ""
     ) -> list[dict[str, Any]]:
-        """특정 날짜 폴더 내 JSONL 파일 목록 반환 (30분 캐시)
+        """특정 폴더 내 JSONL 파일 목록 반환 (30분 캐시)
 
         Args:
-            date_str: YYYYMMDD 형식 날짜. 빈 문자열이면 전체 검색.
+            date_str: 폴더명. 빈 문자열이면 전체 검색.
             task_id: TASK ID (task1/task2/task3).
         """
         cache_key = f"gcs_cache:files:{task_id or '_all'}:{date_str or '_root'}"
@@ -668,7 +668,7 @@ class GCSService:
         return metadata.get(file_id)
 
     def get_date_str_for_file(self, file_id: str) -> str | None:
-        """파일에 연결된 GCS 날짜 폴더(YYYYMMDD) 반환"""
+        """파일에 연결된 GCS 폴더명 반환"""
         meta = self.get_file_metadata(file_id)
         if meta:
             return meta.get("date_str")
