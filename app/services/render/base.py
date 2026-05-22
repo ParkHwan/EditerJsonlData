@@ -33,7 +33,17 @@ def escape_html(text: Any) -> str:
 
 
 def protect_math_expressions(text: str) -> tuple[str, dict[str, str]]:
-    """수식($...$)을 플레이스홀더로 치환하여 HTML escape 시 보존."""
+    r"""수식 delimiter를 플레이스홀더로 치환하여 HTML escape 시 보존.
+
+    지원 delimiter (우선순위 순):
+    - ``\[...\]`` : display math
+    - ``\(...\)`` : inline math
+    - ``$$...$$`` : display math
+    - ``$...$``   : inline math (single-line)
+
+    더 긴 delimiter부터 매칭해야 ``$$x$$``가 ``$`` + ``$x$`` + ``$``로
+    분해되는 사고를 막을 수 있다.
+    """
     placeholders: dict[str, str] = {}
     counter = [0]
 
@@ -43,15 +53,47 @@ def protect_math_expressions(text: str) -> tuple[str, dict[str, str]]:
         counter[0] += 1
         return key
 
+    text = re.sub(r"\\\[(.+?)\\\]", _replace, text, flags=re.DOTALL)
+    text = re.sub(r"\\\((.+?)\\\)", _replace, text, flags=re.DOTALL)
+    text = re.sub(r"\$\$(.+?)\$\$", _replace, text, flags=re.DOTALL)
     text = re.sub(r"\$(.+?)\$", _replace, text)
     return text, placeholders
 
 
 def restore_math_expressions(html: str, placeholders: dict[str, str]) -> str:
-    r"""플레이스홀더를 원래 $...$ 수식으로 복원."""
+    r"""플레이스홀더를 원래 수식으로 복원하되 HTML-safe로 처리한다.
+
+    수식 내부의 ``<``, ``>`` 같은 토큰이 HTML 파서에 태그로 오해석되어
+    DOM이 깨지는 것을 막기 위해 ``escape_html``을 적용해 entity로 치환한다.
+    KaTeX ``auto-render``는 텍스트 노드를 스캔하며, entity는 브라우저 파싱
+    단계에서 다시 ``<`` 문자로 디코딩되므로 KaTeX 입력에는 영향이 없다.
+    백슬래시는 escape 대상이 아니므로 ``\\frac`` 등 TeX 명령어는 그대로
+    보존된다.
+    """
     for key, original in placeholders.items():
-        html = html.replace(key, original)
+        html = html.replace(key, escape_html(original))
     return html
+
+
+def escape_math_in_html(html_text: str) -> str:
+    r"""이미 HTML 문자열인 텍스트 안의 수식 ``$...$`` / ``\(..\)`` 등만
+    HTML-safe하게 변환한다.
+
+    ``content_meta`` 의 ``text_content``가 이미 ``<table>...</table>`` 같은
+    HTML 단편으로 들어오는 경우(`render_meta_inline`의 table 분기)
+    ``process_content_with_tags`` 경로를 거치지 않으므로 별도 보호가 필요하다.
+    """
+    if not isinstance(html_text, str) or not html_text:
+        return html_text
+
+    def _esc(m: re.Match[str]) -> str:
+        return escape_html(m.group(0))
+
+    html_text = re.sub(r"\\\[(.+?)\\\]", _esc, html_text, flags=re.DOTALL)
+    html_text = re.sub(r"\\\((.+?)\\\)", _esc, html_text, flags=re.DOTALL)
+    html_text = re.sub(r"\$\$(.+?)\$\$", _esc, html_text, flags=re.DOTALL)
+    html_text = re.sub(r"\$(.+?)\$", _esc, html_text)
+    return html_text
 
 
 def format_text_with_newlines(text: Any) -> str:
