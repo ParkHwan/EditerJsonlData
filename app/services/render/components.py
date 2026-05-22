@@ -11,6 +11,7 @@ from typing import Any
 
 from .base import (
     escape_html,
+    escape_math_in_html,
     format_text_with_newlines,
     protect_math_expressions,
     render_image_tag,
@@ -18,6 +19,11 @@ from .base import (
     restore_math_expressions,
     NEWLINE_SYMBOL,
 )
+
+# 메타 태그 참조 패턴(예: <tag_P001_01>) 전용.
+# 과거에는 ``<[^>]+>`` 처럼 모든 HTML 토큰을 잡아 일반 텍스트의 ``<x`` 같은
+# 부등호를 태그로 오해석하던 사고가 있었다(BUG-51 / LaTeX 깨짐 분석).
+META_TAG_PATTERN = r"(<tag_[A-Za-z0-9_]+>)"
 
 # ---------------------------------------------------------------------------
 # 매칭 테이블 상수
@@ -170,6 +176,9 @@ def render_meta_inline(
                     resolved = resolve_tags_in_html(
                         text_content, content_meta, comparison, gcs_image_base_url,
                     )
+                    # 표 셀 내부의 수식($...$ 등)이 raw HTML로 들어와도
+                    # 브라우저가 부등호를 태그로 오인하지 않도록 entity화한다.
+                    resolved = escape_math_in_html(resolved)
                     html += f'<div class="meta-table-content">{resolved}</div>'
                 elif isinstance(text_content, (list, str)) and "[[" in str(text_content):
                     html += render_match_table(
@@ -236,12 +245,11 @@ def process_content_with_tags(
 
     text, math_placeholders = protect_math_expressions(content_text)
 
-    tag_pattern = r"(<[^>]+>)"
-    parts = re.split(tag_pattern, text)
+    parts = re.split(META_TAG_PATTERN, text)
     result = ""
 
     for part in parts:
-        if re.match(r"<[^>]+>", part):
+        if re.match(META_TAG_PATTERN, part):
             tag_name = part[1:-1]
             if content_meta and tag_name in content_meta:
                 result += render_meta_inline(
